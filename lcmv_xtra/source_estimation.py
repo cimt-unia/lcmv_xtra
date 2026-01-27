@@ -125,21 +125,26 @@ def load_subject(ica_file_path, gpsc_file_path, subject_id=None, logger=None):
     log.info("Preprocessing complete")
     return raw, ch_pos
 
-def validate_fsaverage(fsaverage_dir):
-    """Validate fsaverage directory contains required BEM and source files."""
-    fsaverage_dir = Path(fsaverage_dir)
+def validate_fsaverage(subjects_dir):
+    """
+    Validate that subjects_dir contains a valid 'fsaverage' subject.
     
-    # Check if this directory contains the expected fsaverage structure
-    bem_dir = fsaverage_dir / 'bem'
-    bem_file = bem_dir / 'fsaverage-5120-5120-5120-bem-sol.fif'
-    src_file = fsaverage_dir / 'fsaverage-vol-5mm-src.fif'
+    Parameters:
+        subjects_dir: Directory containing the 'fsaverage' folder
+                     (e.g., '/path/to/derivatives/lcmv')
+    """
+    subjects_dir = Path(subjects_dir)
+    fsaverage_dir = subjects_dir / 'fsaverage'
+    
+    bem_file = fsaverage_dir / 'bem' / 'fsaverage-5120-5120-5120-bem-sol.fif'
+    src_file = subjects_dir / 'fsaverage-vol-5mm-src.fif'  # ← Note: at top level
     
     if not (bem_file.exists() and src_file.exists()):
         raise FileNotFoundError(
-            f"Missing files in {fsaverage_dir}. Expected:\n"
-            f"  bem/fsaverage-5120-5120-5120-bem-sol.fif\n"
+            f"Missing files in {subjects_dir}. Expected:\n"
+            f"  fsaverage/bem/fsaverage-5120-...-bem-sol.fif\n"
             f"  fsaverage-vol-5mm-src.fif\n"
-            "Run: download_fsaverage('/parent/dir/of/fsaverage')"
+            "Run: download_fsaverage('/path/to/derivatives/lcmv')"
         )
     return bem_file, src_file
 
