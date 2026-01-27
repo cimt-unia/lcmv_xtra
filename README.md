@@ -119,9 +119,5 @@ Pipeline **fails explicitly** if mean coregistration error exceeds 5 mm (no sile
 
 All outputs are saved in modern `.h5` format for efficiency and compatibility.
 
----
 
 
-Once you push your code to GitHub, this README will give users a **clear, accurate, and professional** introduction to your tool.
-
-Let me know when you're ready to generate the full repo files or need help with the `pyproject.toml`!
