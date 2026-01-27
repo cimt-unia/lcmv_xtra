@@ -18,6 +18,7 @@ Install directly from GitHub:
 
 ```bash
 pip install git+https://github.com/cimt-unia/lcmv_xtra.git
+!python -m pip install --user git+https://github.com/cimt-unia/lcmv_xtra.git
 ```
 
 > Requires pre-downloaded `fsaverage` in your project's `derivatives/lcmv/` directory.
@@ -87,4 +88,5 @@ project_root/
 ## Technical Details
 
 **Source reconstruction**: LCMV beamforming was performed in fsaverage template. Coregistration employed three-stage procedure: fiducial-based alignment; Iterative Closest Point refinement using all 280 channels as head shape points (nasion weight 2.0) with outlier rejection (>5 mm MRI distance); final refinement (nasion weight 10.0, 20 iterations). Pipeline failed if mean coregistration error exceeded 5 mm (no identity transform fallback). Mean error was 4.86 mm. Five-millimeter isotropic volume grid with three-shell boundary element model was used. Single OAS-regularized covariance estimate from entire trial (noise covariance equal to data covariance). LCMV used max-power orientation selection, reduced rank, rank estimation accounting for average referencing, and Tikhonov regularization (λ = 0.01).
+
 
