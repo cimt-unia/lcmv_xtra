@@ -2,16 +2,18 @@
 
 A robust, reproducible pipeline for **LCMV beamformer-based source estimation** on high-density EEG (e.g., BEL 280-channel systems).
 
-- ✅ **BEL 280 coregistration** using bundled `.gpsc` digitized electrode coordinates  
-- ✅ **Atlas-based time course extraction**: DiFuMo (512 components) and Glasser+Tian (414 ROIs)  
-- ✅ **Fully automated `fsaverage` setup** — no manual downloads required  
-- ✅ **Clean, minimal output** by default (production-ready)  
-- ✅ **Batch-ready** for multi-subject processing  
-- ✅ **Self-contained**: All data files (`.gpcc`, atlas templates) bundled in the package  
+- **BEL 280 coregistration** using bundled `.gpsc` digitized electrode coordinates  
+- **Atlas-based time course extraction**: DiFuMo (512 components) and Glasser+Tian (414 ROIs)  
+- **Fully automated `fsaverage` setup** — no manual downloads required  
+- **Clean, minimal output** by default (production-ready)  
+- **Batch-ready** for multi-subject processing  
+- **Self-contained**: All data files (`.gpcc`, atlas templates) bundled in the package  
 
 > **Note**: Optimized for BEL 280-channel EEG with `fsaverage`, but adaptable to other high-density setups.
 
+
 ---
+
 
 ## 📦 Installation
 
@@ -118,6 +120,7 @@ Pipeline **fails explicitly** if mean coregistration error exceeds 5 mm (no sile
 - **Beamformer**: Max-power orientation, unit-noise-gain, reduced rank, Tikhonov regularization (λ = 0.01)
 
 All outputs are saved in modern `.h5` format for efficiency and compatibility.
+
 
 
 
