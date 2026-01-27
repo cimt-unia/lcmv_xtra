@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lcmv_xtra"
+version = "0.1.0"
+description = "LCMV beamforming for high-density EEG with enhanced coregistration"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "CIMT", email = "cimt@informatik.uni-augsburg.de"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    "mne>=1.6",
+    "nilearn>=0.10",
+    "nibabel>=5.0",
+    "pandas>=2.0",
+    "tqdm",
+    "numpy>=1.21",
+    "scipy",
+]
+
+[tool.setuptools.package-data]
+lcmv_xtra = [
+    "data/bel_280/*",
+    "data/gt_atlas/*"
+]
+
+[project.urls]
+Homepage = "https://github.com/cimt-unia/lcmv_xtra"
+Repository = "https://github.com/cimt-unia/lcmv_xtra.git"
