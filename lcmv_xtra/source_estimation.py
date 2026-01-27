@@ -1,5 +1,6 @@
 # lcmv_xtra/source_estimation.py
 import mne
+import json
 import logging
 import lcmv_xtra
 import numpy as np
