@@ -1,6 +1,9 @@
 # LCMV Source Reconstruction
 
-A robust, reproducible pipeline for **LCMV beamformer-based source estimation** on high-density EEG (e.g., BEL 280-channel systems).
+Linearly Constrained Minimum Variance Beamformer is a spatial filtering technique used for source reconstruction in EEG and MEG data, designed to estimate neural activity from sensor measurements. It operates by scanning a grid of predefined source locations in the brain and computing weights for each location to enhance signals from the target region while suppressing noise and signals from other areas. 
+
+
+#### Details
 
 - **BEL 280 coregistration** using bundled `.gpsc` digitized electrode coordinates  
 - **Atlas-based time course extraction**: DiFuMo (512 components) and Glasser+Tian (414 ROIs)  
@@ -121,6 +124,8 @@ Pipeline **fails explicitly** if mean coregistration error exceeds 5 mm (no sile
 
 All outputs are saved in modern `.h5` format for efficiency and compatibility.
 
+---
 
+For detailed code examples and tutorials, refer to the [MNE-Python documentation](https://mne.tools/stable/auto_tutorials/inverse/50_beamformer_lcmv.html).
 
 
