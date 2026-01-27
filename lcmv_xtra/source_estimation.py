@@ -137,7 +137,7 @@ def validate_fsaverage(subjects_dir):
     fsaverage_dir = subjects_dir / 'fsaverage'
     
     bem_file = fsaverage_dir / 'bem' / 'fsaverage-5120-5120-5120-bem-sol.fif'
-    src_file = subjects_dir / 'fsaverage-vol-5mm-src.fif'  # ← Note: at top level
+    src_file = subjects_dir / 'fsaverage-vol-5mm-src.fif'  # ← at top level (matches download)
     
     if not (bem_file.exists() and src_file.exists()):
         raise FileNotFoundError(
@@ -221,7 +221,7 @@ def lcmv_beamformer(
     # Validate and get resource paths
     bem_file, src_file = validate_fsaverage(fsaverage_dir)
 
-    # Coregistration: subjects_dir must be PARENT of fsaverage_dir
+    # Coregistration
     log.info("Running coregistration...")
     trans_file = output_dir / 'fsaverage-trans.fif'
     trans, coreg_errors = _run_coregistration(
@@ -260,7 +260,7 @@ def lcmv_beamformer(
     stc.save(stc_file, ftype='h5', overwrite=True)
     log.info(f"Saved source estimate: {stc.data.shape[0]} × {stc.data.shape[1]}")
 
-    # Metadata
+    # Metadata - ADD THE TWO PATHS HERE
     metadata = {
         'subject_id': subject_id,
         'task': task,
@@ -269,7 +269,9 @@ def lcmv_beamformer(
         'n_sources': int(stc.data.shape[0]),
         'n_timepoints': int(stc.data.shape[1]),
         'coreg_mean_error_mm': float(coreg_errors['mean']),
-        'regularization': reg
+        'regularization': reg,
+        'subject_output': str(output_dir),      # ← Critical for atlas extraction
+        'fsaverage_dir': str(fsaverage_dir)     # ← Critical for atlas extraction
     }
     with open(output_dir / 'pipeline_metadata.json', 'w') as f:
         json.dump(metadata, f, indent=2)
@@ -278,6 +280,7 @@ def lcmv_beamformer(
     log.info(f"{'='*60}\n")
     
     return metadata
+
 
 def execute_source_estimation(
     project_base,
