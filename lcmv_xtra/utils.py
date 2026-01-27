@@ -22,7 +22,6 @@ def parse_gpsc(filepath):
             continue
     return channels
 
-
 def download_fsaverage(target_dir, verbose=False):
     """
     Download fsaverage and generate required BEM + source space files.
@@ -35,10 +34,10 @@ def download_fsaverage(target_dir, verbose=False):
     Files created:
         {target_dir}/fsaverage/...          (from MNE)
         {target_dir}/fsaverage/bem/fsaverage-5120-5120-5120-bem-sol.fif
-        {target_dir}/fsaverage/fsaverage-vol-5mm-src.fif
+        {target_dir}/fsaverage-vol-5mm-src.fif
     """
     target_dir = Path(target_dir)
-    target_dir.mkdir(parents=True, exist_ok=True)  # Ensure parent exists
+    target_dir.mkdir(parents=True, exist_ok=True)
     
     log = logging.getLogger('lcmv.setup')
     log.setLevel(logging.INFO if verbose else logging.WARNING)
@@ -70,8 +69,8 @@ def download_fsaverage(target_dir, verbose=False):
     else:
         log.info("BEM solution already exists.")
 
-    # 3. Generate volume source space (inside fsaverage_dir)
-    src_file = fsaverage_dir / 'fsaverage-vol-5mm-src.fif'
+    # 3. Generate volume source space (at TOP LEVEL of target_dir)
+    src_file = target_dir / 'fsaverage-vol-5mm-src.fif'  # ← FIXED: not inside fsaverage/
     if not src_file.exists():
         log.info("Creating 5mm volume source space...")
         src = mne.setup_volume_source_space(
@@ -86,4 +85,4 @@ def download_fsaverage(target_dir, verbose=False):
     else:
         log.info("Volume source space already exists.")
 
-    log.info(f"✅ fsaverage resources ready at: {fsaverage_dir}")
+    log.info(f"✅ fsaverage resources ready at: {target_dir}")
