@@ -225,7 +225,7 @@ def lcmv_beamformer(
     log.info("Running coregistration...")
     trans_file = output_dir / 'fsaverage-trans.fif'
     trans, coreg_errors = _run_coregistration(
-        input, ch_pos, 'fsaverage', fsaverage_dir.parent, trans_file, log
+        input, ch_pos, 'fsaverage', fsaverage_dir, trans_file, log
     )
 
     # Source space
