@@ -39,30 +39,35 @@ Or in Jupyter/Colab:
 ### Step 1: One-time project setup
 ```python
 from lcmv_xtra import download_fsaverage
-download_fsaverage('/path/to/bids_root')  # Downloads fsaverage + builds BEM/source space
+
+fs_dir = '/path/to/fsaverage'
+download_fsaverage(fs_dir)  
 ```
 
 ### Step 2: Single-subject pipeline
 ```python
 from lcmv_xtra import execute_source_estimation, difumo_extraction, gt_extraction
 
-# Source estimation (clean mode)
+
+# Step 1: Source Estimation
 metadata = execute_source_estimation(
     project_base='/path/to/bids_root',
     subject_id='sub-01',
     task='move',
-    ica_file_path='derivatives/ica/sub-01_task-move_ica.fif'
+    ica_file_path='derivatives/ica/sub-01_task-move_ica.fif',
+    fsaverage_dir=fs_dir
 )
 
-# Atlas extraction
+# Step 2: Glasser & Tian Atlas Extraction
 gt_tc, _ = gt_extraction(
     subject_output_dir=metadata['subject_output'],
-    global_subjects_dir=metadata['global_subjects_dir']
+    global_subjects_dir=metadata['fsaverage_dir']
 )
 
+# Step 3: DiFuMo Atlas Extraction
 difumo_tc, _ = difumo_extraction(
     subject_output_dir=metadata['subject_output'],
-    global_subjects_dir=metadata['global_subjects_dir']
+    global_subjects_dir=metadata['fsaverage_dir']
 )
 ```
 
@@ -127,5 +132,6 @@ All outputs are saved in modern `.h5` format for efficiency and compatibility.
 ---
 
 For detailed code examples and tutorials, refer to the [MNE-Python documentation](https://mne.tools/stable/auto_tutorials/inverse/50_beamformer_lcmv.html).
+
 
 
