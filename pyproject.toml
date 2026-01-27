@@ -33,10 +33,11 @@ dependencies = [
     "numpy>=1.21",
     "scipy",
 ]
-packages = [
-    {include = "lcmv_xtra"},
-    {include = "lcmv_xtra.data", from = "lcmv_xtra"}
-]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["lcmv_xtra*"]
+exclude = ["notebooks*"]
 
 [tool.setuptools.package-data]
 lcmv_xtra = ["data/**/*"]
