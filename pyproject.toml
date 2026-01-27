@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "LCMV beamforming for high-density EEG with enhanced coregistration"
 readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
 authors = [
     {name = "CIMT", email = "cimt@informatik.uni-augsburg.de"}
