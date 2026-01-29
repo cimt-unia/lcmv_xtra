@@ -11,6 +11,7 @@ Linearly Constrained Minimum Variance Beamformer is a spatial filtering techniqu
 - **Clean, minimal output** by default (production-ready)  
 - **Batch-ready** for multi-subject processing  
 - **Self-contained**: All data files (`.gpcc`, atlas templates) bundled in the package  
+- **WPLI connectivity analysis**: Motor-basal-executive networks for both atlases
 
 > **Note**: Optimized for BEL 280-channel EEG with `fsaverage`, but adaptable to other high-density setups.
 
@@ -23,12 +24,12 @@ Linearly Constrained Minimum Variance Beamformer is a spatial filtering techniqu
 Install directly from GitHub:
 
 ```bash
-pip install git+https://github.com/cimt-unia/lcmv_xtra.git
+pip install git+https://github.com/cimt-unia/lcmv_xtra.git  
 ```
 
 Or in Jupyter/Colab:
 ```python
-!python -m pip install --user git+https://github.com/cimt-unia/lcmv_xtra.git 
+!python -m pip install --user git+https://github.com/cimt-unia/lcmv_xtra.git   
 ```
 
 
@@ -71,8 +72,47 @@ difumo_tc, _ = difumo_extraction(
 )
 ```
 
-### Step 3: Batch processing
-Loop over subjects — each run is independent and thread-safe.
+### Step 3: WPLI Connectivity
+
+#### Create your epochs (any method you prefer)
+```python
+# Example: Load pre-computed phase-based epochs
+import numpy as np
+epochs_data = np.load('Sbj001.npz')['inphase_epochs']  # (n_epochs, n_rois, n_times)
+```
+
+#### Compute connectivity matrices
+```python
+from lcmv_xtra import (
+    compute_gt_motor_connectivity,
+    compute_gt_full_connectivity,
+    compute_difumo_connectivity
+)
+
+
+
+# Glasser+Tian: Full 414×414 connectivity matrix  
+gt_full_conn = compute_gt_full_connectivity(epochs_data, band_name="gamma")
+
+
+
+# Glasser+Tian: Motor-Basal-Executive network
+gt_motor_conn = compute_gt_motor_connectivity(epochs_data, band_name="beta")
+
+# DiFuMo: Motor-cognitive network (hardcoded component indices)
+difumo_conn = compute_difumo_connectivity(epochs_data, band_name="beta")
+
+```
+
+#### Supported frequency bands
+- `"theta"` (4-8 Hz)
+- `"alpha"` (8-12 Hz) 
+- `"low_beta"` (13-20 Hz)
+- `"high_beta"` (20-30 Hz)
+- `"beta"` (13-30 Hz)
+- `"low_gamma"` (30-60 Hz)
+- `"high_gamma"` (60-120 Hz)
+- `"gamma"` (30-100 Hz)
 
 ---
 
@@ -105,10 +145,11 @@ bids_root/
 - MNE-Python ≥ 1.6
 - Nilearn ≥ 0.10
 - Nibabel, Pandas, NumPy, SciPy
+- **mne-connectivity ≥ 1.0** (for WPLI computation)
 
 Install via:
 ```bash
-pip install mne nilearn nibabel pandas numpy scipy
+pip install mne nilearn nibabel pandas numpy scipy mne-connectivity
 ```
 
 ---
@@ -126,12 +167,9 @@ Pipeline **fails explicitly** if mean coregistration error exceeds 5 mm (no sile
 - **Forward model**: Three-shell BEM
 - **Covariance**: Single OAS-regularized estimate from entire recording
 - **Beamformer**: Max-power orientation, unit-noise-gain, reduced rank, Tikhonov regularization (λ = 0.01)
+- **Connectivity**: WPLI2 debiased estimator with multitaper spectral analysis
 
 All outputs are saved in modern `.h5` format for efficiency and compatibility.
 
 ---
-
-For detailed code examples and tutorials, refer to the [MNE-Python documentation](https://mne.tools/stable/auto_tutorials/inverse/50_beamformer_lcmv.html).
-
-
 
