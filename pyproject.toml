@@ -30,6 +30,7 @@ dependencies = [
     "tqdm",
     "numpy>=1.21",
     "scipy",
+    "mne-connectivity>=1.0"  # ← Added missing dependency
 ]
 
 [tool.setuptools.packages.find]
