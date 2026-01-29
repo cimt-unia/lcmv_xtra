@@ -1,11 +1,12 @@
 # lcmv_xtra/connectivity.py
 
-
+import lcmv_xtra  
 import numpy as np
 import pandas as pd
 from pathlib import Path
 from nilearn import datasets
 from mne_connectivity import spectral_connectivity_epochs
+
 
 
 # UTILS
@@ -47,14 +48,11 @@ def compute_connectivity_matrix(
     return matrix
 
 
-
-
-
 # GLASSER & TIAN ATLAS
 
 def _get_bundled_gt_roi_file() -> Path:
     """Get path to bundled GT atlas ROI file."""
-    package_dir = Path(wpli_connect.__file__).parent
+    package_dir = Path(lcmv_xtra.__file__).parent  
     roi_file = package_dir / 'data' / 'gt_atlas' / 'roi_labels.csv'
     if not roi_file.exists():
         raise FileNotFoundError(f"Bundled GT ROI file not found: {roi_file}")
@@ -62,7 +60,7 @@ def _get_bundled_gt_roi_file() -> Path:
 
 
 def compute_gt_full_connectivity(
-    epochs_data: np.ndarray,  # ✅ Fixed: added colon and proper name
+    epochs_ np.ndarray,
     band_name: str = "beta",
     sfreq: float = 500.0,
     method: str = 'wpli2_debiased'
@@ -128,7 +126,7 @@ def select_motor_rois() -> dict:
 
 
 def compute_gt_motor_connectivity(
-    epochs_data: np.ndarray,  # ✅ Fixed: added colon and proper name
+    epochs_ np.ndarray,
     band_name: str = "beta",
     sfreq: float = 500.0,
     method: str = 'wpli2_debiased'
@@ -156,13 +154,6 @@ def compute_gt_motor_connectivity(
     
     matrix = compute_connectivity_matrix(selected_data, fmin, fmax, sfreq, method)
     return pd.DataFrame(matrix, index=roi_names, columns=roi_names)
-
-
-
-
-
-
-
 
 
 # DIFUMO ATLAS
@@ -203,7 +194,7 @@ def compute_difumo_connectivity(
     method: str = 'wpli2_debiased'
 ) -> pd.DataFrame:
     all_names = get_difumo_names(dimension, resolution_mm)
-    selected_indices = motor_rois()  # ✅ Fixed: was calling undefined function
+    selected_indices = motor_rois()
     roi_names = [all_names[i] for i in selected_indices]
     
     if epochs_data.shape[1] != dimension:
@@ -218,18 +209,3 @@ def compute_difumo_connectivity(
     
     matrix = compute_connectivity_matrix(selected_data, fmin, fmax, sfreq, method)
     return pd.DataFrame(matrix, index=roi_names, columns=roi_names)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
