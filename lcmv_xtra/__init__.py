@@ -3,14 +3,22 @@
 from ._config import *  # Set env vars first
 
 # Main workflow functions (public API)
-from .utils import download_fsaverage 
 from .source_estimation import execute_source_estimation
-from .atlas_extraction import difumo_extraction, gt_extraction
+from .utils import download_fsaverage  # ← Keep this in utils where it belongs
+from .atlas_extraction import gt_extraction, difumo_extraction
+from .connectivity import (
+    compute_gt_motor_connectivity,
+    compute_gt_full_connectivity,
+    compute_difumo_connectivity
+)
 
 __version__ = "0.1.0"
 __all__ = [
     "execute_source_estimation",
-    "download_fsaverage",
-    "difumo_extraction", 
-    "gt_extraction"
+    "download_fsaverage", 
+    "gt_extraction",
+    "difumo_extraction",
+    "compute_gt_motor_connectivity",
+    "compute_gt_full_connectivity", 
+    "compute_difumo_connectivity"
 ]
