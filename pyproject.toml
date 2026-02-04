@@ -30,7 +30,7 @@ dependencies = [
     "tqdm",
     "numpy>=1.21",
     "scipy",
-    "mne-connectivity>=1.0"  # ← Added missing dependency
+    "mne-connectivity"  
 ]
 
 [tool.setuptools.packages.find]
@@ -44,3 +44,4 @@ lcmv_xtra = ["data/**/*"]
 [project.urls]
 Homepage = "https://github.com/cimt-unia/lcmv_xtra"
 Repository = "https://github.com/cimt-unia/lcmv_xtra.git"
+
