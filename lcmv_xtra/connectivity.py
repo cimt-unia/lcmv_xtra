@@ -8,7 +8,6 @@ from nilearn import datasets
 from mne_connectivity import spectral_connectivity_epochs
 
 
-
 # UTILS
 
 def get_frequency_bands():
@@ -25,7 +24,7 @@ def get_frequency_bands():
     }
 
 def compute_connectivity_matrix(
-     np.ndarray,
+    data: np.ndarray,
     fmin: float,
     fmax: float,
     sfreq: float = 500.0,
@@ -60,7 +59,7 @@ def _get_bundled_gt_roi_file() -> Path:
 
 
 def compute_gt_full_connectivity(
-    epochs_ np.ndarray,
+    epochs_data: np.ndarray,
     band_name: str = "beta",
     sfreq: float = 500.0,
     method: str = 'wpli2_debiased'
@@ -126,7 +125,7 @@ def select_motor_rois() -> dict:
 
 
 def compute_gt_motor_connectivity(
-    epochs_ np.ndarray,
+    epochs_data: np.ndarray,
     band_name: str = "beta",
     sfreq: float = 500.0,
     method: str = 'wpli2_debiased'
@@ -186,7 +185,7 @@ def motor_rois() -> list[int]:
 
 
 def compute_difumo_connectivity(
-    epochs_ np.ndarray,
+    epochs_data: np.ndarray,
     band_name: str = "beta",
     dimension: int = 512,
     resolution_mm: int = 2,
