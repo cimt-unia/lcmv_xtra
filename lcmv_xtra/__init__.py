@@ -9,7 +9,8 @@ from .atlas_extraction import gt_extraction, difumo_extraction
 from .connectivity import (
     compute_gt_motor_connectivity,
     compute_gt_full_connectivity,
-    compute_difumo_connectivity
+    compute_difumo_connectivity,
+    get_motor_roi_metadata
 )
 
 __version__ = "0.1.0"
@@ -20,5 +21,7 @@ __all__ = [
     "difumo_extraction",
     "compute_gt_motor_connectivity",
     "compute_gt_full_connectivity", 
-    "compute_difumo_connectivity"
+    "compute_difumo_connectivity",
+    "get_motor_roi_metadata"
 ]
+
