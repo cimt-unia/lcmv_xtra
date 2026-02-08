@@ -33,7 +33,7 @@ def plot_mni_orthoview(
     base_dir: str = "/mnt/movement/users/jaizor/xtra/derivatives/lcmv",
     figsize: Tuple[int, int] = (18, 7),
     marker_size: int = 10,
-    cmap: str = 'Set1',
+    cmap: str = 'Purples_r',
     show: bool = True
 ) -> plt.Figure:
     """Plot over fsaverage T1 from base_dir/fsaverage/mri/T1.mgz (1 mm isotropic)."""
@@ -96,7 +96,7 @@ def plot_mni_orthoview(
 
     title = f"Coordinate: {region_names[0]}" if n_coords == 1 else f"Brain Locations: {n_coords} Region(s)"
     fig.suptitle(title, fontsize=14, fontweight='bold', y=0.97)
-    fig.subplots_adjust(right=0.85 if n_coords > 1 else 0.95, wspace=0.35, top=0.85, left=0.08)
+    fig.subplots_adjust(right=0.85 if n_coords > 1 else 0.95, wspace=0.35, top=0.95, left=0.08)
 
     if show:
         plt.show()
@@ -162,8 +162,6 @@ def compute_psd(
     band_powers = _compute_band_powers(freqs, psd)
     return freqs.astype(np.float32), psd.astype(np.float32), band_powers
 
-
-
 def visualize_source_at_coordinate(
     stc_path: str,
     mni_coord: list,
@@ -171,8 +169,8 @@ def visualize_source_at_coordinate(
     base_dir: str = "/mnt/movement/users/jaizor/xtra/derivatives/lcmv",
     sfreq: float = SFREQ,
     psd_method: str = 'welch',
-    band_cmap: str = 'Set2',  # Changed to Set2 for bold, distinct colors
-    psd_color: str = '#2E3440'  # Dark gray for PSD line
+    psd_color: str = "#4A3387",
+    band_cmap: str = "Blues"
 ):
     """
     Visualize full-spectrum PSD at a given MNI coordinate.
@@ -184,8 +182,8 @@ def visualize_source_at_coordinate(
     - base_dir: Directory containing fsaverage/ and source space files
     - sfreq: Sampling frequency (Hz)
     - psd_method: 'welch' or 'multitaper'
-    - band_cmap: Colormap for frequency band highlighting (default: 'Set2')
-    - psd_color: Color for the main PSD line (default: dark gray)
+    - psd_color: Color for the main PSD line (default: dark purple)
+    - band_cmap: Colormap for frequency band shading (default: "Blues")
     """
     # Load STC and source space
     stc = mne.read_source_estimate(stc_path)
@@ -219,63 +217,85 @@ def visualize_source_at_coordinate(
     # Compute PSD
     freqs, psd, band_powers = compute_psd(ts, sfreq=sfreq, method=psd_method, fmin=1.0, fmax=100.0)
 
-    # Plot full-spectrum PSD with BOLD band colors
+    # Plot full-spectrum PSD
     fig, ax = plt.subplots(figsize=(12, 5))
-    ax.plot(freqs, psd, color=psd_color, linewidth=2.2, label='PSD')
+    ax.plot(freqs, psd, color=psd_color, linewidth=2.2)
 
-    # BOLD band colors - much more visible!
-    bands_list = list(FREQ_BANDS.keys())
-    n_bands = len(bands_list)
+    # --- Band shading (much softer) ---
+    cmap = plt.colormaps.get_cmap(band_cmap)
+    n_bands = len(FREQ_BANDS)
     
-    try:
-        cmap_func = plt.colormaps[band_cmap]
-    except KeyError:
-        print(f"Warning: colormap '{band_cmap}' not found. Using 'Set2'")
-        cmap_func = plt.colormaps['Set2']
+    for i, (band, (fmin, fmax)) in enumerate(FREQ_BANDS.items()):
+        if fmax < freqs[0] or fmin > freqs[-1]:
+            continue
+        
+        color_intensity = 0.3 + (i / max(n_bands - 1, 1)) * 0.4
+        band_color = cmap(color_intensity)
+        
+        band_low = max(fmin, freqs[0])
+        band_high = min(fmax, freqs[-1])
+        ax.axvspan(band_low, band_high, color=band_color, alpha=0.10, zorder=0)
+
+    # --- Vertical boundaries (subtle dashed lines) ---
+    all_boundaries = set()
+    for fmin, fmax in FREQ_BANDS.values():
+        if freqs[0] <= fmin <= freqs[-1]:
+            all_boundaries.add(fmin)
+        if freqs[0] <= fmax <= freqs[-1]:
+            all_boundaries.add(fmax)
     
-    if n_bands == 1:
-        band_colors = {bands_list[0]: cmap_func(0.7)}
-    else:
-        # Use distinct, bold colors from qualitative colormaps
-        band_colors = {
-            band: cmap_func(i % cmap_func.N)
-            for i, band in enumerate(bands_list)
-        }
+    for boundary in sorted(all_boundaries):
+        ax.axvline(boundary, color='gray', linestyle=':', alpha=0.4, linewidth=0.6, zorder=1)
 
-    # Shade each band with HIGH visibility (alpha=0.3 instead of 0.15)
-    for band, (fmin, fmax) in FREQ_BANDS.items():
-        ax.axvspan(fmin, fmax, color=band_colors[band], alpha=0.3,  # ← BOLD alpha=0.3
-                   label=band.replace('_', ' '))
+    # --- Band names ABOVE the plot ---
+    for band, (low, high) in FREQ_BANDS.items():
+        if high < freqs[0] or low > freqs[-1]:
+            continue
+        band_low = max(low, freqs[0])
+        band_high = min(high, freqs[-1])
+        center_x = (band_low + band_high) / 2
+        
+        ax.text(center_x, 1.02, band.replace('_', ' '), 
+               transform=ax.get_xaxis_transform(),
+               ha='center', va='bottom',
+               fontsize=8, color='dimgray', alpha=0.85, fontweight='regular')
 
-    ax.set_title(f"{roi_name} — Power Spectral Density ({psd_method.capitalize()})", fontweight='bold')
-    ax.set_xlabel("Frequency (Hz)")
-    ax.set_ylabel("Power (Linear)")
+    # --- Y-axis label with log indication ---
+    y_label = "PSD (log₁₀)"
+    if psd_method == 'welch':
+        y_label += " (Welch)"
+    elif psd_method == 'multitaper':
+        y_label += " (Multitaper)"
+
+    # --- REMOVE ax.set_title() and use fig.suptitle() INSTEAD ---
+    ax.set_xlabel("Frequency (Hz)", fontsize=11)
+    ax.set_ylabel(y_label, fontsize=11)
     ax.set_yscale('log')
     ax.set_xlim(1, 100)
-    ax.grid(True, alpha=0.3, linestyle='--')
-    # Keep legend in upper right as originally designed
-    ax.legend(loc='upper right', fontsize=9, ncol=2, title="Frequency Bands")
-    plt.tight_layout()
+    ax.grid(True, which='both', alpha=0.2, linestyle='-', linewidth=0.5)
+    ax.tick_params(axis='both', which='major', labelsize=10)
+
+    # --- CRITICAL: Use suptitle and proper spacing ---
+    fig.suptitle(f"{roi_name} — Power Spectral Density", 
+                 fontsize=14, fontweight='bold', y=0.98)
+    
+
+
     plt.show()
 
-    # Print integrated band powers
-    print("\nBand Powers (integrated):")
-    for band, power in band_powers.items():
-        display_name = band.replace('_', ' ')
-        print(f"  {display_name}: {power:.2e}")
-
-
 '''
-# EXAMPLE USAGE
+
+# EXAMPLE USAGE 
 
 from lcmv_xtra.viz import visualize_source_at_coordinate
 
 visualize_source_at_coordinate(
-    stc_path="/path/lcmv/sub-001/source_estimate_LCMV.h5",
+    stc_path="/mnt/movement/users/jaizor/xtra/derivatives/lcmv/sub-001_bima_off/source_estimate_LCMV.h5",
     mni_coord=[-42, -18, 56],
     roi_name="Left M1",
     base_dir="/mnt/movement/users/jaizor/xtra/derivatives/_fs",
-    psd_method='welch'  # or 'multitaper'
+    psd_method='welch',  # or 'multitaper'
+    band_cmap="Purples_r"    
 )
 
 '''
