@@ -163,6 +163,7 @@ def compute_psd(
     return freqs.astype(np.float32), psd.astype(np.float32), band_powers
 
 
+
 def visualize_source_at_coordinate(
     stc_path: str,
     mni_coord: list,
@@ -170,8 +171,8 @@ def visualize_source_at_coordinate(
     base_dir: str = "/mnt/movement/users/jaizor/xtra/derivatives/lcmv",
     sfreq: float = SFREQ,
     psd_method: str = 'welch',
-    band_cmap: str = 'magma_r',
-    psd_color: str = '#2E3440'  # Dark gray from Nord palette
+    band_cmap: str = 'Set2',  # Changed to Set2 for bold, distinct colors
+    psd_color: str = '#2E3440'  # Dark gray for PSD line
 ):
     """
     Visualize full-spectrum PSD at a given MNI coordinate.
@@ -183,7 +184,7 @@ def visualize_source_at_coordinate(
     - base_dir: Directory containing fsaverage/ and source space files
     - sfreq: Sampling frequency (Hz)
     - psd_method: 'welch' or 'multitaper'
-    - band_cmap: Colormap for frequency band highlighting (default: 'magma_r')
+    - band_cmap: Colormap for frequency band highlighting (default: 'Set2')
     - psd_color: Color for the main PSD line (default: dark gray)
     """
     # Load STC and source space
@@ -218,67 +219,51 @@ def visualize_source_at_coordinate(
     # Compute PSD
     freqs, psd, band_powers = compute_psd(ts, sfreq=sfreq, method=psd_method, fmin=1.0, fmax=100.0)
 
-    # Plot full-spectrum PSD with improved aesthetics
-    fig, ax = plt.subplots(figsize=(14, 6))
-    
-    # Main PSD line with improved styling
-    ax.plot(freqs, psd, color=psd_color, linewidth=2.5, alpha=0.9, label='PSD')
-    
-    # Enhanced band coloring with better aesthetic mapping
+    # Plot full-spectrum PSD with BOLD band colors
+    fig, ax = plt.subplots(figsize=(12, 5))
+    ax.plot(freqs, psd, color=psd_color, linewidth=2.2, label='PSD')
+
+    # BOLD band colors - much more visible!
     bands_list = list(FREQ_BANDS.keys())
     n_bands = len(bands_list)
     
     try:
         cmap_func = plt.colormaps[band_cmap]
     except KeyError:
-        print(f"Warning: colormap '{band_cmap}' not found. Using 'magma_r'")
-        cmap_func = plt.colormaps['magma_r']
+        print(f"Warning: colormap '{band_cmap}' not found. Using 'Set2'")
+        cmap_func = plt.colormaps['Set2']
     
-    # Create harmonious band colors
     if n_bands == 1:
         band_colors = {bands_list[0]: cmap_func(0.7)}
     else:
-        # Use perceptually uniform spacing across the colormap
+        # Use distinct, bold colors from qualitative colormaps
         band_colors = {
-            band: cmap_func(0.2 + 0.7 * i / (n_bands - 1))
+            band: cmap_func(i % cmap_func.N)
             for i, band in enumerate(bands_list)
         }
 
-    # Shade each band with improved styling
+    # Shade each band with HIGH visibility (alpha=0.3 instead of 0.15)
     for band, (fmin, fmax) in FREQ_BANDS.items():
-        alpha_val = 0.18 if band in ['Alpha', 'Beta'] else 0.12  # Emphasize key bands
-        ax.axvspan(fmin, fmax, color=band_colors[band], alpha=alpha_val,
-                   label=band.replace('_', ' '), zorder=0)
+        ax.axvspan(fmin, fmax, color=band_colors[band], alpha=0.3,  # ← BOLD alpha=0.3
+                   label=band.replace('_', ' '))
 
-    # Enhanced styling
-    ax.set_title(f"{roi_name} — Power Spectral Density ({psd_method.capitalize()})", 
-                 fontsize=14, fontweight='bold', pad=20)
-    ax.set_xlabel("Frequency (Hz)", fontsize=12, fontweight='medium')
-    ax.set_ylabel("Power Spectral Density", fontsize=12, fontweight='medium')
+    ax.set_title(f"{roi_name} — Power Spectral Density ({psd_method.capitalize()})", fontweight='bold')
+    ax.set_xlabel("Frequency (Hz)")
+    ax.set_ylabel("Power (Linear)")
     ax.set_yscale('log')
     ax.set_xlim(1, 100)
-    ax.grid(True, alpha=0.25, linestyle='-', linewidth=0.8)
-    
-    # Improved legend positioning
-    if n_bands <= 4:
-        legend_loc = 'upper right'
-        ncol = 1
-    else:
-        legend_loc = 'upper center'
-        ncol = 2 if n_bands <= 8 else 3
-    
-    ax.legend(loc=legend_loc, fontsize=10, ncol=ncol, 
-              framealpha=0.9, fancybox=True, shadow=False,
-              title="Frequency Bands", title_fontsize=11)
-    
+    ax.grid(True, alpha=0.3, linestyle='--')
+    # Keep legend in upper right as originally designed
+    ax.legend(loc='upper right', fontsize=9, ncol=2, title="Frequency Bands")
     plt.tight_layout()
     plt.show()
 
-    # Print integrated band powers with better formatting
-    print("\n📊 Band Powers (integrated):")
+    # Print integrated band powers
+    print("\nBand Powers (integrated):")
     for band, power in band_powers.items():
         display_name = band.replace('_', ' ')
-        print(f"  {display_name:<12}: {power:.2e}")
+        print(f"  {display_name}: {power:.2e}")
+
 
 '''
 # EXAMPLE USAGE
