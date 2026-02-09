@@ -361,16 +361,16 @@ index,roi_name,hemisphere,region_full_name,functional_system,sub_system
 359,L_p24_ROI,Left,Posterior Cingulate Area 24,CinguloOpercular,MidCingulate
 360,HIP-head-m1-rh,Right,Hippocampus (Head Subfield m1),Limbic,Hippocampus
 361,HIP-head-m2-rh,Right,Hippocampus (Head Subfield m2),Limbic,Hippocampus
-362,THA-VAip-rh,Right,Thalamus (Ventral Anterior, internal part),Thalamus,Thalamus
-363,THA-VAia-rh,Right,Thalamus (Ventral Anterior, internal part),Thalamus,Thalamus
-364,HIP-head-l-rh,Right,Hippocampus (Head, Lateral),Limbic,Hippocampus
+362,THA-VAip-rh,Right,Thalamus (Ventral Anterior internal part),Thalamus,Thalamus
+363,THA-VAia-rh,Right,Thalamus (Ventral Anterior internal part),Thalamus,Thalamus
+364,HIP-head-l-rh,Right,Hippocampus (Head Lateral),Limbic,Hippocampus
 365,HIP-body-rh,Right,Hippocampus (Body),Limbic,Hippocampus
 366,HIP-tail-rh,Right,Hippocampus (Tail),Limbic,Hippocampus
 367,THA-VPm-rh,Right,Thalamus (Ventral Posteromedial),Thalamus,Thalamus
 368,THA-VPl-rh,Right,Thalamus (Ventral Posterolateral),Thalamus,Thalamus
-369,THA-VAs-rh,Right,Thalamus (Ventral Anterior, superior part),Thalamus,Thalamus
-370,THA-DAm-rh,Right,Thalamus (Dorsomedial, anterior medial part),Thalamus,Thalamus
-371,THA-DAl-rh,Right,Thalamus (Dorsomedial, anterior lateral part),Thalamus,Thalamus
+369,THA-VAs-rh,Right,Thalamus (Ventral Anterior superior part),Thalamus,Thalamus
+370,THA-DAm-rh,Right,Thalamus (Dorsomedial anterior medial part),Thalamus,Thalamus
+371,THA-DAl-rh,Right,Thalamus (Dorsomedial anterior lateral part),Thalamus,Thalamus
 372,PUT-VA-rh,Right,Putamen (Ventral Anterior),BasalGanglia,Striatum
 373,PUT-DA-rh,Right,Putamen (Dorsal Anterior),BasalGanglia,Striatum
 374,PUT-VP-rh,Right,Putamen (Ventral Posterior),BasalGanglia,Striatum
@@ -386,18 +386,18 @@ index,roi_name,hemisphere,region_full_name,functional_system,sub_system
 384,NAc-core-rh,Right,Nucleus Accumbens (Core),Limbic,Striatum
 385,pGP-rh,Right,Globus Pallidus (Posterior),BasalGanglia,Pallidum
 386,aGP-rh,Right,Globus Pallidus (Anterior),BasalGanglia,Pallidum
-387,HIP-head-m1-lh,Left,Hippocampus (Head, Subfield m1),Limbic,Hippocampus
-388,HIP-head-m2-lh,Left,Hippocampus (Head, Subfield m2),Limbic,Hippocampus
-389,THA-VAip-lh,Left,Thalamus (Ventral Anterior, internal part),Thalamus,Thalamus
-390,THA-VAia-lh,Left,Thalamus (Ventral Anterior, internal part),Thalamus,Thalamus
+387,HIP-head-m1-lh,Left,Hippocampus (Head Subfield m1),Limbic,Hippocampus
+388,HIP-head-m2-lh,Left,Hippocampus (Head Subfield m2),Limbic,Hippocampus
+389,THA-VAip-lh,Left,Thalamus (Ventral Anterior internal part),Thalamus,Thalamus
+390,THA-VAia-lh,Left,Thalamus (Ventral Anterior internal part),Thalamus,Thalamus
 391,HIP-head-l-lh,Left,Hippocampus (Head, Lateral),Limbic,Hippocampus
 392,HIP-body-lh,Left,Hippocampus (Body),Limbic,Hippocampus
 393,HIP-tail-lh,Left,Hippocampus (Tail),Limbic,Hippocampus
 394,THA-VPm-lh,Left,Thalamus (Ventral Posteromedial),Thalamus,Thalamus
 395,THA-VPl-lh,Left,Thalamus (Ventral Posterolateral),Thalamus,Thalamus
-396,THA-VAs-lh,Left,Thalamus (Ventral Anterior, superior part),Thalamus,Thalamus
-397,THA-DAm-lh,Left,Thalamus (Dorsomedial, anterior medial part),Thalamus,Thalamus
-398,THA-DAl-lh,Left,Thalamus (Dorsomedial, anterior lateral part),Thalamus,Thalamus
+396,THA-VAs-lh,Left,Thalamus (Ventral Anterior superior part),Thalamus,Thalamus
+397,THA-DAm-lh,Left,Thalamus (Dorsomedial anterior medial part),Thalamus,Thalamus
+398,THA-DAl-lh,Left,Thalamus (Dorsomedial anterior lateral part),Thalamus,Thalamus
 399,PUT-VA-lh,Left,Putamen (Ventral Anterior),BasalGanglia,Striatum
 400,PUT-DA-lh,Left,Putamen (Dorsal Anterior),BasalGanglia,Striatum
 401,PUT-VP-lh,Left,Putamen (Ventral Posterior),BasalGanglia,Striatum
