@@ -208,7 +208,7 @@ index,roi_name,hemisphere,region_full_name,functional_system,sub_system
 206,L_PCV_ROI,Left,Precuneus Visual Area,DefaultMode,Precuneus
 207,L_STV_ROI,Left,Superior Temporal Visual Area,VentralAttention,Temporal
 208,L_7Pm_ROI,Left,Medial Area 7P,DorsalAttention,Parietal
-209,L_Precuneus_ROI,Left,Precuneus (Medial Area 7),DefaultMode,Precuneus
+209,L_Precuneus_ROI,Left,Precuneus,DefaultMode,Precuneus
 210,L_POS1_ROI,Left,Parieto-Occipital Sulcus Area 1,Visual,Dorsal
 211,L_23d_ROI,Left,Dorsal Posterior Cingulate Area 23,DefaultMode,PosteriorCingulate
 212,L_v23ab_ROI,Left,Ventral Posterior Cingulate Area 23ab,DefaultMode,PosteriorCingulate
