@@ -359,8 +359,8 @@ index,roi_name,hemisphere,region_full_name,functional_system,sub_system
 357,L_PI_ROI,Left,Parieto-Insular Vestibular Cortex,VentralAttention,Vestibular
 358,L_a32pr_ROI,Left,Anterior Pregenual Cingulate Area 32,CinguloOpercular,AnteriorCingulate
 359,L_p24_ROI,Left,Posterior Cingulate Area 24,CinguloOpercular,MidCingulate
-360,HIP-head-m1-rh,Right,Hippocampus (Head, Subfield m1),Limbic,Hippocampus
-361,HIP-head-m2-rh,Right,Hippocampus (Head, Subfield m2),Limbic,Hippocampus
+360,HIP-head-m1-rh,Right,Hippocampus (Head Subfield m1),Limbic,Hippocampus
+361,HIP-head-m2-rh,Right,Hippocampus (Head Subfield m2),Limbic,Hippocampus
 362,THA-VAip-rh,Right,Thalamus (Ventral Anterior, internal part),Thalamus,Thalamus
 363,THA-VAia-rh,Right,Thalamus (Ventral Anterior, internal part),Thalamus,Thalamus
 364,HIP-head-l-rh,Right,Hippocampus (Head, Lateral),Limbic,Hippocampus
