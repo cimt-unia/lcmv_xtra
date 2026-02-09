@@ -390,7 +390,7 @@ index,roi_name,hemisphere,region_full_name,functional_system,sub_system
 388,HIP-head-m2-lh,Left,Hippocampus (Head Subfield m2),Limbic,Hippocampus
 389,THA-VAip-lh,Left,Thalamus (Ventral Anterior internal part),Thalamus,Thalamus
 390,THA-VAia-lh,Left,Thalamus (Ventral Anterior internal part),Thalamus,Thalamus
-391,HIP-head-l-lh,Left,Hippocampus (Head, Lateral),Limbic,Hippocampus
+391,HIP-head-l-lh,Left,Hippocampus (Head Lateral),Limbic,Hippocampus
 392,HIP-body-lh,Left,Hippocampus (Body),Limbic,Hippocampus
 393,HIP-tail-lh,Left,Hippocampus (Tail),Limbic,Hippocampus
 394,THA-VPm-lh,Left,Thalamus (Ventral Posteromedial),Thalamus,Thalamus
