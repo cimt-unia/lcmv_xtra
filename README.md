@@ -115,20 +115,7 @@ difumo_conn = compute_difumo_connectivity(epochs_data, band_name="beta")
 - `"gamma"` (30-100 Hz)
 
 
----
 
-## 🔧 Dependencies
-
-- Python ≥ 3.9
-- MNE-Python ≥ 1.6
-- Nilearn ≥ 0.10
-- Nibabel, Pandas, NumPy, SciPy
-- **mne-connectivity ≥ 1.0** (for WPLI computation)
-
-Install via:
-```bash
-pip install mne nilearn nibabel pandas numpy scipy mne-connectivity
-```
 
 ---
 
