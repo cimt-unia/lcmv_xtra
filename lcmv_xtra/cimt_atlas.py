@@ -6,12 +6,15 @@ Combines:
   2. Nettekoven (32 ROIs)
   3. Custom STN (2 ROIs)
 
+All atlas files are bundled within the lcmv_xtra package.
+Only the fsaverage source space (global_subjects_dir) is user-specific.
+
 Usage:
     from lcmv_xtra.cimt_atlas import cimt_extraction
     
     cimt_tc, cimt_labels = cimt_extraction(
         subject_output_dir=metadata['subject_output'],
-        global_subjects_dir=metadata['fsaverage_dir'], # User-specific path
+        global_subjects_dir=metadata['fsaverage_dir'],
         verbose=True
     )
 """
@@ -25,7 +28,7 @@ from pathlib import Path
 from nilearn import image
 import lcmv_xtra
 
-# Import shared helpers
+# Import shared helpers from the existing atlas_extraction module
 from lcmv_xtra.atlas_extraction import (
     _setup_logger, 
     _get_mni_coordinates, 
@@ -48,16 +51,17 @@ STN_RADIUS_MM = 5.0
 # =============================================================================
 
 def _extract_gt_component(stc, src, gt_atlas_dir, n_times, logger):
-    """Extract GT (414 ROIs) from dynamic path."""
+    """Extract GT (414 ROIs). Logic from atlas_extraction.txt."""
     logger.info(">>> Extracting Glasser+Tian (0-413)...")
-    stc_data = np.abs(stc.data) if np.iscomplexobj(stc.data) else stc.data
+    stc_data = np.abs(stc.data) if np.iscomplexobj(stc.data) else stc_data
     
     glasser_file = Path(gt_atlas_dir) / "glasser_360_MNI152NLin6Asym.nii.gz"
     tian_file = Path(gt_atlas_dir) / "tian_subcortex_54_MNI152NLin6Asym.nii"
     
-    # ... (Rest of GT logic remains identical) ...
     glasser_img = nib.load(glasser_file)
     tian_img = nib.load(tian_file)
+    
+    # Resample & Combine
     tian_resampled = image.resample_to_img(tian_img, glasser_img, interpolation='nearest', force_resample=True)
     g_data = glasser_img.get_fdata()
     t_data = tian_resampled.get_fdata()
@@ -65,6 +69,7 @@ def _extract_gt_component(stc, src, gt_atlas_dir, n_times, logger):
     gt_data = g_data + t_data
     gt_img = nib.Nifti1Image(gt_data, affine=glasser_img.affine)
     
+    # Map Sources
     src_coords_mni = _get_mni_coordinates(stc, src)
     vox_coords = _coords_to_voxels(src_coords_mni, gt_img)
     
@@ -75,6 +80,7 @@ def _extract_gt_component(stc, src, gt_atlas_dir, n_times, logger):
         if (0 <= x < shape[0]) and (0 <= y < shape[1]) and (0 <= z < shape[2]):
             labels[i] = int(gt_array[x, y, z])
             
+    # Extract
     n_rois = 414
     time_courses = np.full((n_rois, n_times), np.nan, dtype=np.float32)
     for roi in range(1, n_rois + 1):
@@ -85,7 +91,7 @@ def _extract_gt_component(stc, src, gt_atlas_dir, n_times, logger):
     return np.nan_to_num(time_courses, nan=0.0)
 
 def _extract_nettekoven_component(stc, src, nk_atlas_dir, n_times, logger):
-    """Extract Nettekoven (32 ROIs) from dynamic path."""
+    """Extract Nettekoven (32 ROIs). Logic from cereb_extraction.txt."""
     logger.info(">>> Extracting Nettekoven Cerebellum (414-445)...")
     stc_data = np.abs(stc.data) if np.iscomplexobj(stc.data) else stc_data
     label_offset = 414
@@ -97,6 +103,7 @@ def _extract_nettekoven_component(stc, src, nk_atlas_dir, n_times, logger):
     cereb_img = nib.load(atlas_file)
     cereb_data = cereb_img.get_fdata()
     
+    # Map Sources
     src_coords_mni = _get_mni_coordinates(stc, src)
     vox_coords = _coords_to_voxels(src_coords_mni, cereb_img)
     valid_mask = _filter_valid_voxels(vox_coords, cereb_img.shape)
@@ -105,6 +112,7 @@ def _extract_nettekoven_component(stc, src, nk_atlas_dir, n_times, logger):
     
     logger.info(f"Using {len(valid_indices)} sources within cerebellum")
     
+    # Assign labels with offset
     labels = np.zeros(len(src_coords_mni), dtype=int)
     shape = cereb_data.shape
     for i, (x, y, z) in enumerate(valid_voxels):
@@ -112,6 +120,7 @@ def _extract_nettekoven_component(stc, src, nk_atlas_dir, n_times, logger):
         if raw_label > 0:
             labels[valid_indices[i]] = raw_label + label_offset
             
+    # Extract
     n_rois = 32
     time_courses = np.full((n_rois, n_times), np.nan, dtype=np.float32)
     for roi in range(1, n_rois + 1):
@@ -122,10 +131,15 @@ def _extract_nettekoven_component(stc, src, nk_atlas_dir, n_times, logger):
     return np.nan_to_num(time_courses, nan=0.0)
 
 def _extract_stn_component(stc, src, n_times, logger):
-    """Extract STN (2 ROIs) using coordinates. No atlas files needed."""
+    """
+    Extract STN (2 ROIs) using coordinate averaging.
+    Logic EXACTLY from stn_voxel_extraction.txt (extract_stn_from_grid).
+    Uses src[0]['rr'] from the loaded source space.
+    """
     logger.info(">>> Extracting Custom STN (446-447)...")
     stc_data = np.abs(stc.data) if np.iscomplexobj(stc.data) else stc_data
     
+    # CRITICAL: Use active vertices from STC and coordinates from Source Space
     active_vertices = stc.vertices[0]
     active_coords_mm = src[0]['rr'][active_vertices] * 1000.0
     
@@ -134,12 +148,14 @@ def _extract_stn_component(stc, src, n_times, logger):
     for roi_name, target_mni in STN_ROIS.items():
         target = np.array(target_mni)
         distances = np.linalg.norm(active_coords_mm - target, axis=1)
+        
         selected_indices = np.where(distances <= STN_RADIUS_MM)[0]
         
         if len(selected_indices) == 0:
             logger.warning(f"No voxels within {STN_RADIUS_MM}mm for {roi_name}. Using closest.")
             selected_indices = [np.argmin(distances)]
             
+        # Average time series across selected vertices
         roi_data = stc_data[selected_indices, :].mean(axis=0).astype(np.float32)
         time_courses.append(roi_data)
         logger.info(f"  ✅ {roi_name}: Averaged {len(selected_indices)} voxels")
@@ -160,12 +176,18 @@ def cimt_extraction(subject_output_dir, global_subjects_dir,
     subject_output_dir : str or Path
         Path to subject output (contains source_estimate_LCMV.h5).
     global_subjects_dir : str or Path
-        Path to fsaverage resources (MUST contain 'fsaverage-vol-5mm-src.fif').
-        This is the ONLY path that depends on the user's system setup.
+        Path to fsaverage resources. MUST contain 'fsaverage-vol-5mm-src.fif'.
     stn_radius_mm : float
         Radius for STN voxel averaging (default 5.0).
     verbose : bool
         Enable console logging.
+        
+    Returns
+    -------
+    cimt_tc : np.ndarray
+        Array of shape (448, n_times).
+    cimt_labels : pd.DataFrame
+        DataFrame loaded from package data (indices 0-447).
     """
     subject_output_dir = Path(subject_output_dir)
     global_subjects_dir = Path(global_subjects_dir)
