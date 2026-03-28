@@ -256,3 +256,182 @@ def compute_difumo_connectivity(
     matrix = compute_connectivity_matrix(selected_data, fmin, fmax, sfreq, method)
     return pd.DataFrame(matrix, index=roi_names, columns=roi_names)
 
+
+
+# =============================================================================
+# CIMT UNIFIED ATLAS (448 ROIs) - NEW
+# =============================================================================
+
+def _get_bundled_cimt_roi_file() -> Path:
+    """Get path to bundled CIMT atlas ROI file."""
+    package_dir = Path(lcmv_xtra.__file__).parent  
+    roi_file = package_dir / 'data' / 'cimt_atlas' / 'cimt_atlas_labels.csv'
+    if not roi_file.exists():
+        raise FileNotFoundError(f"Bundled CIMT ROI file not found: {roi_file}")
+    return roi_file
+
+
+def compute_cimt_full_connectivity(
+    epochs_data: np.ndarray,
+    band_name: str = "beta",
+    sfreq: float = 500.0,
+    method: str = 'wpli2_debiased'
+) -> pd.DataFrame:
+    """
+    Compute full 448x448 connectivity matrix for the CIMT Unified Atlas.
+    
+    Parameters
+    ----------
+    epochs_data : np.ndarray
+        Shape (n_epochs, 448, n_times).
+    band_name : str
+        Frequency band (e.g., 'beta', 'gamma').
+    sfreq : float
+        Sampling frequency.
+    method : str
+        Connectivity method (default: 'wpli2_debiased').
+        
+    Returns
+    -------
+    pd.DataFrame
+        Symmetric connectivity matrix with CIMT ROI names as index/columns.
+    """
+    roi_file = _get_bundled_cimt_roi_file()
+    roi_df = pd.read_csv(roi_file)
+    roi_names = roi_df['roi_name'].tolist()
+    
+    if epochs_data.shape[1] != len(roi_names):
+        raise ValueError(
+            f"CIMT ROI count mismatch: expected {len(roi_names)} (448), "
+            f"got {epochs_data.shape[1]}"
+        )
+    
+    bands = get_frequency_bands()
+    if band_name not in bands:
+        raise ValueError(f"Unknown band: '{band_name}'. Available: {list(bands.keys())}")
+    
+    fmin, fmax = bands[band_name]
+    matrix = compute_connectivity_matrix(epochs_data, fmin, fmax, sfreq, method)
+    return pd.DataFrame(matrix, index=roi_names, columns=roi_names)
+
+
+def select_cimt_motor_network_rois() -> dict:
+    """
+    Select ROIs for the Motor-Basal-Executive network INCLUDING STN.
+    
+    Logic:
+    1. All Motor, BasalGanglia, Frontoparietal (Executive) from GT/Cereb.
+    2. Explicitly adds STN-lh and STN-rh.
+    """
+    roi_file = _get_bundled_cimt_roi_file()
+    roi_df = pd.read_csv(roi_file)
+    FULL_ROI_NAMES = roi_df['roi_name'].tolist()
+    
+    # Standard Selection (Same logic as GT but on the unified DF)
+    motor_rois = roi_df[
+        (roi_df['functional_system'] == 'Motor') |
+        (roi_df['sub_system'].isin(['Primary', 'Premotor', 'Supplementary', 'Eye']))
+    ]['roi_name'].tolist()
+
+    basal_rois = roi_df[
+        (roi_df['functional_system'] == 'BasalGanglia') |
+        (roi_df['region_full_name'].str.contains(
+            r'Putamen|Caudate|Globus Pallidus|Nucleus Accumbens', 
+            case=False, na=False
+        ))
+    ]['roi_name'].tolist()
+
+    executive_rois = roi_df[
+        (roi_df['functional_system'] == 'Frontoparietal') &
+        (roi_df['sub_system'].isin(['DLPFC', 'IFJ', 'IFS', 'VLPFC']))
+    ]['roi_name'].tolist()
+    
+    # CRITICAL: Explicitly add STN if not already caught by BasalGanglia filter
+    # (Depending on your CSV, STN might be 'BasalGanglia' but good to be explicit)
+    stn_rois = ['STN-lh', 'STN-rh']
+    
+    # Combine and deduplicate
+    TARGET_ROIS = sorted(set(motor_rois + basal_rois + executive_rois + stn_rois))
+    
+    # Map to indices
+    missing = [r for r in TARGET_ROIS if r not in FULL_ROI_NAMES]
+    if missing:
+        raise ValueError(f"Selected ROIs not found in CIMT atlas: {missing}")
+        
+    TARGET_INDICES = [FULL_ROI_NAMES.index(r) for r in TARGET_ROIS]
+    
+    return {
+        'target_rois': TARGET_ROIS,
+        'target_indices': TARGET_INDICES,
+        'full_roi_names': FULL_ROI_NAMES
+    }
+
+
+def get_cimt_motor_network_metadata(save_to: Path | str | None = None) -> pd.DataFrame:
+    """
+    Return DataFrame of CIMT ROIs selected for the motor-basal-executive-STN network.
+    Includes 'new_index' for the reduced matrix.
+    """
+    roi_file = _get_bundled_cimt_roi_file()
+    roi_df = pd.read_csv(roi_file)
+    
+    selection = select_cimt_motor_network_rois()
+    target_names = selection['target_rois']
+    
+    # Filter the full DF to only include selected ROIs
+    selected_df = roi_df[roi_df['roi_name'].isin(target_names)].copy()
+    selected_df = selected_df.sort_values('roi_name').reset_index(drop=True)
+    selected_df.insert(0, 'new_index', range(len(selected_df)))
+    
+    if save_to is not None:
+        save_to = Path(save_to)
+        save_to.parent.mkdir(parents=True, exist_ok=True)
+        selected_df.to_csv(save_to, index=False)
+        
+    return selected_df
+
+
+def compute_cimt_motor_connectivity(
+    epochs_data: np.ndarray,
+    band_name: str = "beta",
+    sfreq: float = 500.0,
+    method: str = 'wpli2_debiased'
+) -> pd.DataFrame:
+    """
+    Compute reduced connectivity matrix for the Motor-Basal-Executive-STN network.
+    
+    Parameters
+    ----------
+    epochs_data : np.ndarray
+        Shape (n_epochs, 448, n_times).
+    band_name : str
+        Frequency band.
+    sfreq : float
+        Sampling frequency.
+    method : str
+        Connectivity method.
+        
+    Returns
+    -------
+    pd.DataFrame
+        Reduced connectivity matrix including STN nodes.
+    """
+    roi_info = select_cimt_motor_network_rois()
+    target_indices = roi_info['target_indices']
+    roi_names = roi_info['target_rois']
+    
+    if epochs_data.shape[1] != len(roi_info['full_roi_names']):
+        raise ValueError(
+            f"CIMT ROI count mismatch: expected {len(roi_info['full_roi_names'])} (448), "
+            f"got {epochs_data.shape[1]}"
+        )
+    
+    selected_data = epochs_data[:, target_indices, :]
+    bands = get_frequency_bands()
+    if band_name not in bands:
+        raise ValueError(f"Unknown band: '{band_name}'. Available: {list(bands.keys())}")
+    
+    fmin, fmax = bands[band_name]
+    matrix = compute_connectivity_matrix(selected_data, fmin, fmax, sfreq, method)
+    return pd.DataFrame(matrix, index=roi_names, columns=roi_names)
+    
