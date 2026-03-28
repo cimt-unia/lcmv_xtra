@@ -1,0 +1,33 @@
+﻿index,roi_name,hemisphere,region_full_name,functional_system,sub_system
+414,M1L,Left,Primary Motor Region 1 (Left),Motor,Cerebellum
+415,M2L,Left,Primary Motor Region 2 (Left),Motor,Cerebellum
+416,M3L,Left,Primary Motor Region 3 (Left),Motor,Cerebellum
+417,M4L,Left,Primary Motor Region 4 (Left),Motor,Cerebellum
+418,A1L,Left,Action Observation Region 1 (Left),Action,Cerebellum
+419,A2L,Left,Action Imagery Region 2 (Left),Action,Cerebellum
+420,A3L,Left,Biological Motion Region 3 (Left),Action,Cerebellum
+421,D1L,Left,Working Memory Region 1 (Left),Demand,Cerebellum
+422,D2L,Left,Inhibition Region 2 (Left),Demand,Cerebellum
+423,D3L,Left,Cognitive Flexibility Region 3 (Left),Demand,Cerebellum
+424,D4L,Left,Task Switching Region 4 (Left),Demand,Cerebellum
+425,S1L,Left,Theory of Mind Region 1 (Left),Social,Cerebellum
+426,S2L,Left,Affective Empathy Region 2 (Left),Social,Cerebellum
+427,S3L,Left,Emotional Face Region 3 (Left),Social,Cerebellum
+428,S4L,Left,Social Scene Region 4 (Left),Social,Cerebellum
+429,S5L,Left,Moral Judgment Region 5 (Left),Social,Cerebellum
+430,M1R,Right,Primary Motor Region 1 (Right),Motor,Cerebellum
+431,M2R,Right,Primary Motor Region 2 (Right),Motor,Cerebellum
+432,M3R,Right,Primary Motor Region 3 (Right),Motor,Cerebellum
+433,M4R,Right,Primary Motor Region 4 (Right),Motor,Cerebellum
+434,A1R,Right,Action Observation Region 1 (Right),Action,Cerebellum
+435,A2R,Right,Action Imagery Region 2 (Right),Action,Cerebellum
+436,A3R,Right,Biological Motion Region 3 (Right),Action,Cerebellum
+437,D1R,Right,Working Memory Region 1 (Right),Demand,Cerebellum
+438,D2R,Right,Inhibition Region 2 (Right),Demand,Cerebellum
+439,D3R,Right,Cognitive Flexibility Region 3 (Right),Demand,Cerebellum
+440,D4R,Right,Task Switching Region 4 (Right),Demand,Cerebellum
+441,S1R,Right,Theory of Mind Region 1 (Right),Social,Cerebellum
+442,S2R,Right,Affective Empathy Region 2 (Right),Social,Cerebellum
+443,S3R,Right,Emotional Face Region 3 (Right),Social,Cerebellum
+444,S4R,Right,Social Scene Region 4 (Right),Social,Cerebellum
+445,S5R,Right,Moral Judgment Region 5 (Right),Social,Cerebellum
