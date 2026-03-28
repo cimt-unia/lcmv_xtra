@@ -56,6 +56,7 @@ def _extract_nettekoven_ts(stc, src, nk_atlas_dir, subject_output, label_offset=
     log = logger or logging.getLogger(__name__)
     log.info("Starting Nettekoven cerebellar atlas extraction")
     
+    # Handle complex-valued source estimates consistently
     stc_data = np.abs(stc.data) if np.iscomplexobj(stc.data) else stc.data
     n_times = stc_data.shape[1]
     
@@ -100,12 +101,14 @@ def _extract_nettekoven_ts(stc, src, nk_atlas_dir, subject_output, label_offset=
     
     return np.nan_to_num(time_courses, nan=0.0), roi_names
 
+
 def _extract_stn_ts(stc, src, n_times, logger=None):
     """Extract STN time courses (2 ROIs) using coordinate averaging."""
     log = logger or logging.getLogger(__name__)
     log.info("Starting Custom STN voxel extraction")
     
-    stc_data = np.abs(stc.data) if np.iscomplexobj(stc.data) else stc_data
+    # FIX: Reference stc.data (not stc_data) in the else clause
+    stc_data = np.abs(stc.data) if np.iscomplexobj(stc.data) else stc.data
     
     active_vertices = stc.vertices[0]
     active_coords_mm = src[0]['rr'][active_vertices] * 1000.0
@@ -129,6 +132,7 @@ def _extract_stn_ts(stc, src, n_times, logger=None):
         log.info(f"  ✅ {roi_name}: Averaged {len(selected_indices)} voxels")
         
     return np.vstack(time_courses), roi_names
+
 
 # =============================================================================
 # MAIN UNIFIED FUNCTION
@@ -157,6 +161,11 @@ def cimt_extraction(subject_output_dir, fsaverage_dir,
     cimt_labels : pd.DataFrame
         DataFrame loaded from package data (indices 0-447).
     """
+    # Apply user-specified STN radius if different from default
+    global STN_RADIUS_MM
+    if stn_radius_mm != STN_RADIUS_MM:
+        STN_RADIUS_MM = stn_radius_mm
+    
     subject_output_dir = Path(subject_output_dir)
     fsaverage_dir = Path(fsaverage_dir)
     
@@ -248,5 +257,5 @@ def cimt_extraction(subject_output_dir, fsaverage_dir,
     log.info("✅ CIMT Extraction Complete!")
     log.info(f"   Shape: {cimt_tc.shape}")
     log.info("="*60 + "\n")
-    
+
     return cimt_tc, cimt_labels
