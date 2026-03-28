@@ -9,11 +9,20 @@ from .atlas_extraction import gt_extraction, difumo_extraction
 from .cimt_atlas import cimt_extraction
 
 from .connectivity import (
+    # GT Connectivity
     compute_gt_motor_connectivity,
     compute_gt_full_connectivity,
+    get_motor_roi_metadata,
+    
+    # DiFuMo Connectivity
     compute_difumo_connectivity,
-    get_motor_roi_metadata
+    
+    # CIMT Connectivity (NEW)
+    compute_cimt_full_connectivity,
+    compute_cimt_motor_connectivity,
+    get_cimt_motor_network_metadata
 )
+
 from .viz import (  
     visualize_source_at_coordinate,
     plot_mni_orthoview,
@@ -27,16 +36,19 @@ __all__ = [
     "execute_source_estimation",
     "download_fsaverage", 
     
-    # Atlas Extractions (Standard + Unified)
+    # Atlas Extractions
     "gt_extraction",
     "difumo_extraction",
     "cimt_extraction",  
     
-    # Connectivity Analysis
+    # Connectivity Analysis (GT, DiFuMo, CIMT)
     "compute_gt_motor_connectivity",
     "compute_gt_full_connectivity", 
-    "compute_difumo_connectivity",
     "get_motor_roi_metadata",
+    "compute_difumo_connectivity",
+    "compute_cimt_full_connectivity",      
+    "compute_cimt_motor_connectivity",     
+    "get_cimt_motor_network_metadata",     
     
     # Visualization & Utils
     "visualize_source_at_coordinate",  
