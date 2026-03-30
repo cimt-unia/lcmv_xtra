@@ -202,64 +202,10 @@ def compute_gt_motor_connectivity(
     return pd.DataFrame(matrix, index=roi_names, columns=roi_names)
 
 
-# DIFUMO ATLAS
-
-def get_difumo_names(dimension: int = 512, resolution_mm: int = 2) -> list[str]:
-    try:
-        atlas = datasets.fetch_atlas_difumo(dimension=dimension, resolution_mm=resolution_mm)
-        return atlas.labels['difumo_names'].astype(str).tolist()
-    except Exception:
-        return [f"Component_{i}" for i in range(dimension)]
-
-
-def motor_rois() -> list[int]:
-    Motor_M1 = [40, 86, 198, 268, 305, 437, 458, 465]
-    Motor_SMA_Premotor = [17, 18, 288, 291, 296, 297, 302, 305, 314, 315, 335, 375, 379, 448]
-    Motor_Medial = [101, 102, 388, 409, 498]
-    Thalamus = [70, 73, 297, 334, 414, 420] 
-    Basal_Ganglia = [30, 53, 224, 260, 405, 422, 109, 110, 315, 331, 467, 479, 55, 71, 307, 223]  
-    Cerebellum_Motor = [43, 47, 83, 84, 127, 183, 220, 221, 295, 304, 310, 311, 374, 378, 381, 403, 441, 490, 491]
-    Somatosensory = [44, 131, 210, 411, 413, 436]
-    Executive_Control = [3, 85, 104, 148, 184, 337, 377, 446, 447, 506, 507]
-    Interoception = [2, 387, 358, 389, 165, 469]
-    Error_Monitoring = [185, 219, 326, 473, 492]
-    
-    return sorted(set(
-        Motor_M1 + Motor_SMA_Premotor + Motor_Medial + Thalamus +
-        Basal_Ganglia + Cerebellum_Motor + Somatosensory +
-        Executive_Control + Interoception + Error_Monitoring
-    ))
-
-
-def compute_difumo_connectivity(
-    epochs_data: np.ndarray,
-    band_name: str = "beta",
-    dimension: int = 512,
-    resolution_mm: int = 2,
-    sfreq: float = 500.0,
-    method: str = 'wpli2_debiased'
-) -> pd.DataFrame:
-    all_names = get_difumo_names(dimension, resolution_mm)
-    selected_indices = motor_rois()
-    roi_names = [all_names[i] for i in selected_indices]
-    
-    if epochs_data.shape[1] != dimension:
-        raise ValueError(f"Expected {dimension} DiFuMo components, got {epochs_data.shape[1]}")
-    
-    selected_data = epochs_data[:, selected_indices, :]
-    bands = get_frequency_bands()
-    if band_name not in bands:
-        available_bands = list(bands.keys())
-        raise ValueError(f"Unknown band: '{band_name}'. Available options: {available_bands}")
-    fmin, fmax = bands[band_name]
-    
-    matrix = compute_connectivity_matrix(selected_data, fmin, fmax, sfreq, method)
-    return pd.DataFrame(matrix, index=roi_names, columns=roi_names)
-
 
 
 # =============================================================================
-# CIMT UNIFIED ATLAS (448 ROIs) - NEW
+# CIMT UNIFIED ATLAS (448 ROIs) 
 # =============================================================================
 
 def _get_bundled_cimt_roi_file() -> Path:
@@ -434,4 +380,64 @@ def compute_cimt_motor_connectivity(
     fmin, fmax = bands[band_name]
     matrix = compute_connectivity_matrix(selected_data, fmin, fmax, sfreq, method)
     return pd.DataFrame(matrix, index=roi_names, columns=roi_names)
+
+
+
+
+
+# DIFUMO ATLAS
+
+def get_difumo_names(dimension: int = 512, resolution_mm: int = 2) -> list[str]:
+    try:
+        atlas = datasets.fetch_atlas_difumo(dimension=dimension, resolution_mm=resolution_mm)
+        return atlas.labels['difumo_names'].astype(str).tolist()
+    except Exception:
+        return [f"Component_{i}" for i in range(dimension)]
+
+
+def motor_rois() -> list[int]:
+    Motor_M1 = [40, 86, 198, 268, 305, 437, 458, 465]
+    Motor_SMA_Premotor = [17, 18, 288, 291, 296, 297, 302, 305, 314, 315, 335, 375, 379, 448]
+    Motor_Medial = [101, 102, 388, 409, 498]
+    Thalamus = [70, 73, 297, 334, 414, 420] 
+    Basal_Ganglia = [30, 53, 224, 260, 405, 422, 109, 110, 315, 331, 467, 479, 55, 71, 307, 223]  
+    Cerebellum_Motor = [43, 47, 83, 84, 127, 183, 220, 221, 295, 304, 310, 311, 374, 378, 381, 403, 441, 490, 491]
+    Somatosensory = [44, 131, 210, 411, 413, 436]
+    Executive_Control = [3, 85, 104, 148, 184, 337, 377, 446, 447, 506, 507]
+    Interoception = [2, 387, 358, 389, 165, 469]
+    Error_Monitoring = [185, 219, 326, 473, 492]
     
+    return sorted(set(
+        Motor_M1 + Motor_SMA_Premotor + Motor_Medial + Thalamus +
+        Basal_Ganglia + Cerebellum_Motor + Somatosensory +
+        Executive_Control + Interoception + Error_Monitoring
+    ))
+
+
+def compute_difumo_connectivity(
+    epochs_data: np.ndarray,
+    band_name: str = "beta",
+    dimension: int = 512,
+    resolution_mm: int = 2,
+    sfreq: float = 500.0,
+    method: str = 'wpli2_debiased'
+) -> pd.DataFrame:
+    all_names = get_difumo_names(dimension, resolution_mm)
+    selected_indices = motor_rois()
+    roi_names = [all_names[i] for i in selected_indices]
+    
+    if epochs_data.shape[1] != dimension:
+        raise ValueError(f"Expected {dimension} DiFuMo components, got {epochs_data.shape[1]}")
+    
+    selected_data = epochs_data[:, selected_indices, :]
+    bands = get_frequency_bands()
+    if band_name not in bands:
+        available_bands = list(bands.keys())
+        raise ValueError(f"Unknown band: '{band_name}'. Available options: {available_bands}")
+    fmin, fmax = bands[band_name]
+    
+    matrix = compute_connectivity_matrix(selected_data, fmin, fmax, sfreq, method)
+    return pd.DataFrame(matrix, index=roi_names, columns=roi_names)
+
+
+
