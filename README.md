@@ -119,6 +119,9 @@ gt_motor_conn = compute_gt_motor_connectivity(epochs_data, band_name="beta")
 # DiFuMo: Motor-cognitive network (hardcoded component indices)
 difumo_conn = compute_difumo_connectivity(epochs_data, band_name="beta")
 
+# CIMT Unified Atlas: Full 448×448 connectivity matrix
+cimt_full_conn = compute_cimt_full_connectivity(cimt_tc, band_name="beta")
+
 ```
 
 #### Supported frequency bands
