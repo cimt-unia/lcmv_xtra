@@ -50,7 +50,7 @@ download_fsaverage(fs_dir)
 from lcmv_xtra import execute_source_estimation, difumo_extraction, gt_extraction
 
 
-# Step 1: Source Estimation
+# Source Estimation
 metadata = execute_source_estimation(
     project_base='/path/to/bids_root',
     subject_id='sub-01',
@@ -59,16 +59,33 @@ metadata = execute_source_estimation(
     fsaverage_dir=fs_dir
 )
 
-# Step 2: Glasser & Tian Atlas Extraction
+# option 1: Glasser & Tian Atlas Extraction
 gt_tc, _ = gt_extraction(
     subject_output_dir=metadata['subject_output'],
     global_subjects_dir=metadata['fsaverage_dir']
 )
 
-# Step 3: DiFuMo Atlas Extraction
+# option 2: DiFuMo Atlas Extraction
 difumo_tc, _ = difumo_extraction(
     subject_output_dir=metadata['subject_output'],
     global_subjects_dir=metadata['fsaverage_dir']
+)
+
+# option 3: CIMT Unified Atlas Extraction (448 ROIs)
+
+'''
+Combines:
+  1. Glasser + Tian (414 ROIs)
+  2. Nettekoven (32 ROIs)
+  3. Custom STN (2 ROIs)
+'''
+
+from lcmv_xtra.cimt_atlas import cimt_extraction
+
+cimt_tc, cimt_labels = cimt_extraction(
+    subject_output_dir=metadata['subject_output'],
+    fsaverage_dir=metadata['fsaverage_dir'],
+    verbose=True
 )
 ```
 
