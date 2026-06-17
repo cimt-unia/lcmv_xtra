@@ -6,7 +6,7 @@ Linearly Constrained Minimum Variance Beamformer is a spatial filtering techniqu
 #### Details
 
 - **BEL 280 coregistration** using bundled `.gpsc` digitized electrode coordinates  
-- **Atlas-based time course extraction**: DiFuMo (512 components) and Glasser+Tian (414 ROIs)  
+- **Atlas-based time course extraction**: CIMT(448 ROIs), DiFuMo (512 components) and Glasser+Tian (414 ROIs)  
 - **Fully automated `fsaverage` setup** — no manual downloads required  
 - **Clean, minimal output** by default (production-ready)  
 - **Batch-ready** for multi-subject processing  
