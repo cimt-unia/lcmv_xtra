@@ -59,19 +59,9 @@ metadata = execute_source_estimation(
     fsaverage_dir=fs_dir
 )
 
-# option 1: Glasser & Tian Atlas Extraction
-gt_tc, _ = gt_extraction(
-    subject_output_dir=metadata['subject_output'],
-    global_subjects_dir=metadata['fsaverage_dir']
-)
 
-# option 2: DiFuMo Atlas Extraction
-difumo_tc, _ = difumo_extraction(
-    subject_output_dir=metadata['subject_output'],
-    global_subjects_dir=metadata['fsaverage_dir']
-)
 
-# option 3: CIMT Unified Atlas Extraction (448 ROIs)
+# option 1: CIMT Unified Atlas Extraction (448 ROIs)
 
 '''
 Combines:
@@ -87,6 +77,19 @@ cimt_tc, cimt_labels = cimt_extraction(
     fsaverage_dir=metadata['fsaverage_dir'],
     verbose=True
 )
+
+# option 2: Glasser & Tian Atlas Extraction
+gt_tc, _ = gt_extraction(
+    subject_output_dir=metadata['subject_output'],
+    global_subjects_dir=metadata['fsaverage_dir']
+)
+
+# option 3: DiFuMo Atlas Extraction
+difumo_tc, _ = difumo_extraction(
+    subject_output_dir=metadata['subject_output'],
+    global_subjects_dir=metadata['fsaverage_dir']
+)
+
 ```
 
 ### Step 3: WPLI Connectivity
@@ -101,16 +104,13 @@ epochs_data = np.load('Sbj001.npz')['inphase_epochs']  # (n_epochs, n_rois, n_ti
 #### Compute connectivity matrices
 ```python
 from lcmv_xtra import (
+    compute_cimt_full_connectivity,
     compute_gt_motor_connectivity,
-    compute_gt_full_connectivity,
     compute_difumo_connectivity
 )
 
-
-
-# Glasser+Tian: Full 414×414 connectivity matrix  
-gt_full_conn = compute_gt_full_connectivity(epochs_data, band_name="gamma")
-
+# CIMT Unified Atlas: Full 448×448 connectivity matrix
+cimt_full_conn = compute_cimt_full_connectivity(cimt_tc, band_name="beta")
 
 
 # Glasser+Tian: Motor-Basal-Executive network
@@ -119,8 +119,7 @@ gt_motor_conn = compute_gt_motor_connectivity(epochs_data, band_name="beta")
 # DiFuMo: Motor-cognitive network (hardcoded component indices)
 difumo_conn = compute_difumo_connectivity(epochs_data, band_name="beta")
 
-# CIMT Unified Atlas: Full 448×448 connectivity matrix
-cimt_full_conn = compute_cimt_full_connectivity(cimt_tc, band_name="beta")
+
 
 ```
 
