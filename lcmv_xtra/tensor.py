@@ -1,3 +1,5 @@
+Is this right or there is an error?
+
 # lcmv_xtra/tensor.py
 
 import pandas as pd
@@ -127,25 +129,71 @@ def assemble_tensor(
     return None
 
 '''
+# Usage Example
+
+
 import lcmv_xtra as lx
 from pathlib import Path
 
-# 1. Define Paths
+# =============================================================================
+# 1. CONFIGURATION
+# =============================================================================
 CLEAN_DIR = Path("/mnt/movement/users/jaizor/xtra/derivatives/eeg/rest/clean")
 FS_DIR = Path("/mnt/movement/users/jaizor/xtra/derivatives/_fs")
 OUTPUT_DIR = Path("./ml_data")
 PROJECT_BASE = Path("/mnt/movement/users/jaizor/xtra")
 
-# 2. Scan for files (using a specific pattern for Left Hand)
-df_index = lx.scan_eeg_paths(CLEAN_DIR, pattern="*_l_eeg_mkit_cleaned.fif")
+# =============================================================================
+# 2. BUILD TENSORS (One per condition)
+# =============================================================================
 
-# 3. Build Tensor (Parallelized & Thread-Safe)
-lx.assemble_tensor(
-    data_index=df_index,
-    fs_dir=FS_DIR,
-    output_dir=OUTPUT_DIR,
-    task_name="left_hand",
-    project_base=PROJECT_BASE,
-    n_jobs=-1 # Uses all cores safely thanks to _config.py
-)
+# --- LEFT HAND ---
+print(">>> Processing Left Hand...")
+df_left = lx.scan_eeg_paths(CLEAN_DIR, pattern="*_l_eeg_mkit_cleaned.fif")
+
+if not df_left.empty:
+    lx.assemble_tensor(
+        data_index=df_left,
+        fs_dir=FS_DIR,
+        output_dir=OUTPUT_DIR,
+        task_name="left_hand", # Saves as study_left_hand.npz
+        project_base=PROJECT_BASE,
+        n_jobs=-1
+    )
+else:
+    print("No Left Hand files found.")
+
+# --- RIGHT HAND ---
+print("\n>>> Processing Right Hand...")
+df_right = lx.scan_eeg_paths(CLEAN_DIR, pattern="*_r_eeg_mkit_cleaned.fif")
+
+if not df_right.empty:
+    lx.assemble_tensor(
+        data_index=df_right,
+        fs_dir=FS_DIR,
+        output_dir=OUTPUT_DIR,
+        task_name="right_hand", # Saves as study_right_hand.npz
+        project_base=PROJECT_BASE,
+        n_jobs=-1
+    )
+else:
+    print("No Right Hand files found.")
+
+# --- EYES CLOSED (Central) ---
+print("\n>>> Processing Eyes Closed (Central)...")
+df_closed = lx.scan_eeg_paths(CLEAN_DIR, pattern="*_c_eeg_mkit_cleaned.fif")
+
+if not df_closed.empty:
+    lx.assemble_tensor(
+        data_index=df_closed,
+        fs_dir=FS_DIR,
+        output_dir=OUTPUT_DIR,
+        task_name="eyes_closed", # Saves as study_eyes_closed.npz
+        project_base=PROJECT_BASE,
+        n_jobs=-1
+    )
+else:
+    print("No Central/Eyes Closed files found.")
+
+print("\n✅ All tensors saved to ./ml_data/")
 '''
