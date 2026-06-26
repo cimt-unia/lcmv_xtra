@@ -8,6 +8,14 @@ from .utils import download_fsaverage
 from .atlas_extraction import gt_extraction, difumo_extraction
 from .cimt_atlas import cimt_extraction
 
+# Tensor / ML Aggregation
+from .tensor import (
+    build_fif_manifest,
+    save_study_tensor,
+    build_study_tensors
+)
+# -----------------------------------------------
+
 from .connectivity import (
     # GT Connectivity
     compute_gt_motor_connectivity,
@@ -40,6 +48,12 @@ __all__ = [
     "gt_extraction",
     "difumo_extraction",
     "cimt_extraction",  
+    
+    # --- ADD THIS BLOCK: Tensor / ML Aggregation ---
+    "build_fif_manifest",
+    "save_study_tensor",
+    "build_study_tensors",
+    # -----------------------------------------------
     
     # Connectivity Analysis (GT, DiFuMo, CIMT)
     "compute_gt_motor_connectivity",
