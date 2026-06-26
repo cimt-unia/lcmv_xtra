@@ -1,17 +1,11 @@
-# lcmv_stats/tensor.py
-"""
-Tools for discovering FIF files and aggregating source-space data 
-into ML-ready 3D tensors.
-"""
+# lcmv_xtra/tensor.py
 
 import pandas as pd
 import numpy as np
 from pathlib import Path
 import logging
-
-# Import lcmv_xtra components directly into the library
-from lcmv_xtra import execute_source_estimation
-from lcmv_xtra.cimt_atlas import cimt_extraction
+from .source_estimation import execute_source_estimation
+from .cimt_atlas import cimt_extraction
 
 logger = logging.getLogger(__name__)
 
