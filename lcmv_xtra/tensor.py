@@ -1,5 +1,3 @@
-Is this right or there is an error?
-
 # lcmv_xtra/tensor.py
 
 import pandas as pd
