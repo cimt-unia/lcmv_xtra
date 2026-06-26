@@ -10,11 +10,10 @@ from .cimt_atlas import cimt_extraction
 
 # Tensor / ML Aggregation
 from .tensor import (
-    build_fif_manifest,
+    scan_eeg_paths,      
     save_study_tensor,
-    build_study_tensors
+    assemble_tensor       
 )
-# -----------------------------------------------
 
 from .connectivity import (
     # GT Connectivity
@@ -49,11 +48,10 @@ __all__ = [
     "difumo_extraction",
     "cimt_extraction",  
     
-    # --- ADD THIS BLOCK: Tensor / ML Aggregation ---
-    "build_fif_manifest",
+    # Tensor / ML Aggregation
+    "scan_eeg_paths",      
     "save_study_tensor",
-    "build_study_tensors",
-    # -----------------------------------------------
+    "assemble_tensor",     
     
     # Connectivity Analysis (GT, DiFuMo, CIMT)
     "compute_gt_motor_connectivity",
