@@ -127,5 +127,25 @@ def assemble_tensor(
     return None
 
 '''
+import lcmv_xtra as lx
+from pathlib import Path
 
+# 1. Define Paths
+CLEAN_DIR = Path("/mnt/movement/users/jaizor/xtra/derivatives/eeg/rest/clean")
+FS_DIR = Path("/mnt/movement/users/jaizor/xtra/derivatives/_fs")
+OUTPUT_DIR = Path("./ml_data")
+PROJECT_BASE = Path("/mnt/movement/users/jaizor/xtra")
+
+# 2. Scan for files (using a specific pattern for Left Hand)
+df_index = lx.scan_eeg_paths(CLEAN_DIR, pattern="*_l_eeg_mkit_cleaned.fif")
+
+# 3. Build Tensor (Parallelized & Thread-Safe)
+lx.assemble_tensor(
+    data_index=df_index,
+    fs_dir=FS_DIR,
+    output_dir=OUTPUT_DIR,
+    task_name="left_hand",
+    project_base=PROJECT_BASE,
+    n_jobs=-1 # Uses all cores safely thanks to _config.py
+)
 '''
