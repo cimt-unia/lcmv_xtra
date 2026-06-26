@@ -20,7 +20,7 @@ Source time courses were extracted for all regions of the **CIMT Unified Atlas**
 
 <br>
 
-### Additional Options
+#### Additional Options
 
 **Motor/Executive network selection for connectivity.** Rather than computing connectivity across the full 448×448 ROI space and subsequently selecting a subnetwork, we identified the Motor-Basal-Executive-STN ROI indices from the atlas metadata *before* any spectral estimation. The source epoch data, shaped as (n_epochs × 448 × n_times), were indexed to extract only the time courses belonging to the target network, producing a reduced array of shape (n_epochs × ~80 × n_times). All connectivity computations were then performed exclusively on this reduced dataset. This approach is computationally efficient, avoids inflating the multiple comparisons burden with irrelevant edges, and ensures that the resulting connectivity matrices are exactly 80×80 in dimension. The target network comprised approximately 80 ROIs spanning four functional systems:
 
