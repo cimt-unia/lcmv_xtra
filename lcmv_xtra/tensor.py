@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import logging
+import lcmv_xtra
 from .source_estimation import execute_source_estimation
 from .cimt_atlas import cimt_extraction
 
@@ -35,7 +36,7 @@ def scan_eeg_paths(root_dir: Path, task_name: str = "rest_off") -> pd.DataFrame:
             records.append({
                 "subject_id": subject_id,
                 "task_name": task_name,
-                "fif_path": str(fif_file.resolve()),
+                "fif_path": str(fif_file.resolve()), # Absolute path
                 "condition_type": "rest" 
             })
             
@@ -60,7 +61,7 @@ def save_study_tensor(all_subject_data: list, task_name: str, output_dir: Path) 
     
     stacked_data = np.stack([d['time_courses'][:, :min_t] for d in all_subject_data])
     subject_ids = np.array([d['subject_id'] for d in all_subject_data])
-    sfreq = all_subject_data[0]['sfreq'] # Assuming uniform sampling rate
+    sfreq = all_subject_data[0]['sfreq'] 
     
     output_path = output_dir / f"study_{task_name}.npz"
     np.savez_compressed(
@@ -76,10 +77,10 @@ def save_study_tensor(all_subject_data: list, task_name: str, output_dir: Path) 
 
 def assemble_tensor(
     data_index: pd.DataFrame,
-    project_base: Path,
     fs_dir: Path,
     output_dir: Path,
     task_name: str,
+    derivatives_root: Path = None, # Optional: Where to save intermediate LCMV files
     verbose: bool = False
 ) -> Path:
     """
@@ -88,18 +89,22 @@ def assemble_tensor(
     
     Args:
         data_index: DataFrame from scan_eeg_paths.
-        project_base: Root directory for the project (used for derivative paths).
-        fs_dir: Path to fsaverage resources.
+        fs_dir: Path to fsaverage resources (must contain fsaverage-vol-5mm-src.fif).
         output_dir: Directory to save the final .npz tensor.
         task_name: Name of the task/condition.
-        verbose: Enable detailed logging from lcmv_xtra.
+        derivatives_root: (Optional) Root folder for intermediate LCMV derivatives. 
+                          If None, uses the current working directory.
+        verbose: Enable detailed logging.
         
     Returns:
-        Path to the saved .npz file, or None if no subjects were processed.
+        Path to the saved .npz file.
     """
     if data_index.empty:
         logger.error("The provided data index is empty. Nothing to process.")
         return None
+
+    if derivatives_root is None:
+        derivatives_root = Path.cwd()
 
     all_subject_data = []
     
@@ -110,20 +115,23 @@ def assemble_tensor(
         logger.info(f">>> Processing {sid} from {fif_path.name}...")
         
         try:
-            # 1. Run Source Estimation (lcmv_xtra handles the absolute path correctly)
+            # 1. Run Source Estimation
+            # We pass the absolute fif_path directly. 
+            # We use a generic project_base just to satisfy the function signature, 
+            # but the actual input file is the absolute one.
             metadata = execute_source_estimation(
-                project_base=project_base,
+                project_base=derivatives_root, 
                 subject_id=sid,
                 task=task_name,
-                ica_file_path=fif_path, 
-                fs_dir=fs_dir,
+                ica_file_path=fif_path, # Absolute path overrides project_base logic
+                fsaverage_dir=fs_dir,
                 verbose=verbose
             )
             
-            # 2. Extract CIMT Time Courses (lcmv_xtra)
+            # 2. Extract CIMT Time Courses
             tc, _ = cimt_extraction(
                 subject_output_dir=Path(metadata['subject_output']),
-                fs_dir=fs_dir,
+                fsaverage_dir=fs_dir,
                 verbose=verbose
             )
             
@@ -146,26 +154,24 @@ def assemble_tensor(
         logger.error("❌ No subjects were successfully processed.")
         return None
 
-
 '''
-# Example Usage
+# Usage Example
 import lcmv_xtra as lx
 from pathlib import Path
 
-# 1. Define paths
-CLEAN_DIR = Path("eeg/rest/clean")
-PROJECT_BASE = Path("xtra")
-FS_DIR = "_fs"
+# 1. Define your paths
+CLEAN_DIR = Path("/mnt/movement/users/jaizor/xtra/derivatives/eeg/rest/clean")
+FS_DIR = Path("/mnt/movement/users/jaizor/xtra/derivatives/_fs")
 OUTPUT_DIR = Path("./ml_data")
 
-# 2. Scan and build the tensor in one go
+# 2. Scan for files (This gives you absolute paths)
 df_index = lx.scan_eeg_paths(CLEAN_DIR, "rest_off")
 
+# 3. Process and build tensor
 lx.assemble_tensor(
     data_index=df_index,
-    project_base=PROJECT_BASE,
-    fs_dir=FS_DIR,
-    output_dir=OUTPUT_DIR,
+    fs_dir=FS_DIR,          # Only FS dir is strictly required for resources
+    output_dir=OUTPUT_DIR,  # Where the .npz goes
     task_name="rest_off",
     verbose=False
 )
