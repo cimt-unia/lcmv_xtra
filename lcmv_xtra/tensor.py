@@ -10,9 +10,10 @@ from .cimt_atlas import cimt_extraction
 logger = logging.getLogger(__name__)
 
 
-def build_fif_manifest(root_dir: Path, task_name: str = "rest_off") -> pd.DataFrame:
+def scan_eeg_paths(root_dir: Path, task_name: str = "rest_off") -> pd.DataFrame:
     """
-    Scans a complex directory structure and returns a clean DataFrame of FIF paths.
+    Recursively scans a directory for cleaned FIF files and returns 
+    a structured DataFrame of paths and metadata.
     """
     records = []
     root = Path(root_dir)
@@ -73,8 +74,8 @@ def save_study_tensor(all_subject_data: list, task_name: str, output_dir: Path) 
     return output_path
 
 
-def build_study_tensors(
-    fif_manifest: pd.DataFrame,
+def assemble_tensor(
+    data_index: pd.DataFrame,
     project_base: Path,
     fs_dir: Path,
     output_dir: Path,
@@ -82,11 +83,11 @@ def build_study_tensors(
     verbose: bool = False
 ) -> Path:
     """
-    Master orchestrator: Processes FIF files from a manifest using lcmv_xtra,
+    Master orchestrator: Processes FIF files from a data index using lcmv_xtra,
     extracts CIMT time courses, and aggregates them into a single 3D .npz tensor.
     
     Args:
-        fif_manifest: DataFrame from build_fif_manifest.
+        data_index: DataFrame from scan_eeg_paths.
         project_base: Root directory for the project (used for derivative paths).
         fs_dir: Path to fsaverage resources.
         output_dir: Directory to save the final .npz tensor.
@@ -96,13 +97,13 @@ def build_study_tensors(
     Returns:
         Path to the saved .npz file, or None if no subjects were processed.
     """
-    if fif_manifest.empty:
-        logger.error("The provided manifest is empty. Nothing to process.")
+    if data_index.empty:
+        logger.error("The provided data index is empty. Nothing to process.")
         return None
 
     all_subject_data = []
     
-    for _, row in fif_manifest.iterrows():
+    for _, row in data_index.iterrows():
         sid = row['subject_id']
         fif_path = Path(row['fif_path'])
         
@@ -115,14 +116,14 @@ def build_study_tensors(
                 subject_id=sid,
                 task=task_name,
                 ica_file_path=fif_path, 
-                fsaverage_dir=fs_dir,
+                fs_dir=fs_dir,
                 verbose=verbose
             )
             
             # 2. Extract CIMT Time Courses (lcmv_xtra)
             tc, _ = cimt_extraction(
                 subject_output_dir=Path(metadata['subject_output']),
-                fsaverage_dir=fs_dir,
+                fs_dir=fs_dir,
                 verbose=verbose
             )
             
@@ -144,3 +145,28 @@ def build_study_tensors(
     else:
         logger.error("❌ No subjects were successfully processed.")
         return None
+
+
+'''
+# Example Usage
+import lcmv_xtra as lx
+from pathlib import Path
+
+# 1. Define paths
+CLEAN_DIR = Path("eeg/rest/clean")
+PROJECT_BASE = Path("xtra")
+FS_DIR = "_fs"
+OUTPUT_DIR = Path("./ml_data")
+
+# 2. Scan and build the tensor in one go
+df_index = lx.scan_eeg_paths(CLEAN_DIR, "rest_off")
+
+lx.assemble_tensor(
+    data_index=df_index,
+    project_base=PROJECT_BASE,
+    fs_dir=FS_DIR,
+    output_dir=OUTPUT_DIR,
+    task_name="rest_off",
+    verbose=False
+)
+'''
