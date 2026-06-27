@@ -1,13 +1,14 @@
 # lcmv_xtra/tensor.py
 
-import pandas as pd
-import numpy as np
-from pathlib import Path
-import logging
 import os
+import logging
+import numpy as np
+import pandas as pd
+from pathlib import Path
+from scipy import signal
+from .cimt_atlas import cimt_extraction
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from .source_estimation import execute_source_estimation
-from .cimt_atlas import cimt_extraction
 
 logger = logging.getLogger(__name__)
 
@@ -68,27 +69,53 @@ def scan_eeg_paths(root_dir: Path, pattern: str = "*_c_eeg_mkit_cleaned.fif") ->
             
     return pd.DataFrame(records)
 
-
-def save_study_tensor(all_subject_data: list, task_name: str, output_dir: Path) -> Path:
-    """Stacks data into a single 3D array: (Subjects, ROIs, Time)."""
+def save_study_tensor(
+    all_subject_data: list, 
+    task_name: str, 
+    output_dir: Path,
+    target_sfreq: float = 250.0 # Default to 250 Hz to preserve data from 250Hz subjects
+) -> Path:
+    """
+    Stacks data into a single 3D array: (Subjects, ROIs, Time).
+    Automatically resamples all subjects to 'target_sfreq' for uniformity.
+    """
     if not all_subject_data: raise ValueError("No data to stack.")
     
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Truncate to shortest time series so they all fit in one array
-    min_t = min([d['time_courses'].shape[1] for d in all_subject_data])
+    resampled_data = []
     
-    stacked_data = np.stack([d['time_courses'][:, :min_t] for d in all_subject_data])
+    # 1. Resample each subject to the target frequency
+    for d in all_subject_data:
+        tc = d['time_courses'] # Shape: (448, T)
+        current_sfreq = d['sfreq']
+        
+        if current_sfreq != target_sfreq:
+            # Calculate duration in seconds
+            duration_sec = tc.shape[1] / current_sfreq
+            
+            # Calculate new number of samples
+            n_samples_new = int(np.round(duration_sec * target_sfreq))
+            
+            # Use scipy.signal.resample (Fourier method) for high accuracy
+            # axis=1 because time is the second dimension (ROIs, Time)
+            tc_resampled = signal.resample(tc, n_samples_new, axis=1)
+            resampled_data.append(tc_resampled)
+        else:
+            resampled_data.append(tc)
+            
+    # 2. Truncate to shortest time series (in case of slight rounding differences)
+    min_t = min([arr.shape[1] for arr in resampled_data])
+    
+    stacked_data = np.stack([arr[:, :min_t] for arr in resampled_data])
     subject_ids = np.array([d['subject_id'] for d in all_subject_data])
-    sfreq = all_subject_data[0]['sfreq']
     
     output_path = output_dir / f"study_{task_name}.npz"
-    np.savez_compressed(output_path, data=stacked_data, subject_ids=subject_ids, sfreq=sfreq)
+    np.savez_compressed(output_path, data=stacked_data, subject_ids=subject_ids, sfreq=target_sfreq)
     
-    logger.info(f"✅ Saved 3D Tensor {stacked_data.shape} to {output_path}")
+    logger.info(f"✅ Saved 3D Tensor {stacked_data.shape} at {target_sfreq} Hz to {output_path}")
     return output_path
-
-
+    
 def assemble_tensor(
     data_index: pd.DataFrame,
     fs_dir: Path,
