@@ -69,6 +69,7 @@ def scan_eeg_paths(root_dir: Path, pattern: str = "*_c_eeg_mkit_cleaned.fif") ->
             
     return pd.DataFrame(records)
 
+
 def save_study_tensor(
     all_subject_data: list, 
     task_name: str, 
@@ -116,6 +117,7 @@ def save_study_tensor(
     logger.info(f"✅ Saved 3D Tensor {stacked_data.shape} at {target_sfreq} Hz to {output_path}")
     return output_path
     
+    
 def assemble_tensor(
     data_index: pd.DataFrame,
     fs_dir: Path,
@@ -123,7 +125,8 @@ def assemble_tensor(
     task_name: str = "study",
     project_base: Path = None,
     n_jobs: int = -1,
-    verbose: bool = False
+    verbose: bool = False,
+    target_sfreq: float = 250.0 # <--- ADDED THIS PARAMETER
 ) -> Path:
     """
     Takes a list of files, processes them in parallel, and saves ONE .npz file.
@@ -150,7 +153,8 @@ def assemble_tensor(
                 all_subject_data.append(result)
 
     if all_subject_data:
-        return save_study_tensor(all_subject_data, task_name, output_dir)
+        # <--- PASS target_sfreq TO SAVE FUNCTION
+        return save_study_tensor(all_subject_data, task_name, output_dir, target_sfreq=target_sfreq)
     return None
 
 '''
@@ -183,7 +187,8 @@ if not df_left.empty:
         output_dir=OUTPUT_DIR,
         task_name="left_hand", # Saves as study_left_hand.npz
         project_base=PROJECT_BASE,
-        n_jobs=-1
+        n_jobs=-1,
+        target_sfreq=250.0 # Force 250 Hz
     )
 else:
     print("No Left Hand files found.")
@@ -199,7 +204,8 @@ if not df_right.empty:
         output_dir=OUTPUT_DIR,
         task_name="right_hand", # Saves as study_right_hand.npz
         project_base=PROJECT_BASE,
-        n_jobs=-1
+        n_jobs=-1,
+        target_sfreq=250.0 # Force 250 Hz
     )
 else:
     print("No Right Hand files found.")
@@ -215,7 +221,8 @@ if not df_closed.empty:
         output_dir=OUTPUT_DIR,
         task_name="eyes_closed", # Saves as study_eyes_closed.npz
         project_base=PROJECT_BASE,
-        n_jobs=-1
+        n_jobs=-1,
+        target_sfreq=250.0 # Force 250 Hz
     )
 else:
     print("No Central/Eyes Closed files found.")
