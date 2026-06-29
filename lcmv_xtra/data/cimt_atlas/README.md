@@ -43,6 +43,9 @@ Source time courses were extracted for all regions of the **CIMT Unified Atlas**
 | Action | 6 | Cerebellar action regions only |
 | Other | 2 | Gustatory cortex (R/L_43_ROI) |
 
+<br>
+
+
 ### Sub-Systems (49 unique)
 Key ones for selection logic:
 - **Motor-relevant:** `Primary` (10), `Premotor` (14), `Supplementary` (4), `Eye` (2), `Cerebellum` (32), `Striatum` (20), `Pallidum` (4), `Subthalamic` (2), `DLPFC` (4), `IFJ` (4), `IFS` (4), `VLPFC` (4)
@@ -57,14 +60,6 @@ Key ones for selection logic:
 2. Tian, Y., Margulies, D.S., Breakspear, M. & Zalesky, A. Topographic organization of the human subcortex unveiled with functional connectivity gradients. Nat. Neurosci. 23, 1421–1432 (2020).
 3. Nettekoven, C. et al. A hierarchical atlas of the human cerebellum for functional precision mapping. bioRxiv (2024).
 
-<br>
 
-#### Additional Options
 
-**Motor/Executive network selection for connectivity.** Rather than computing connectivity across the full 448×448 ROI space and subsequently selecting a subnetwork, we identified the Motor-Basal-Executive-STN ROI indices from the atlas metadata *before* any spectral estimation. The source epoch data, shaped as (n_epochs × 448 × n_times), were indexed to extract only the time courses belonging to the target network, producing a reduced array of shape (n_epochs × ~80 × n_times). All connectivity computations were then performed exclusively on this reduced dataset. This approach is computationally efficient, avoids inflating the multiple comparisons burden with irrelevant edges, and ensures that the resulting connectivity matrices are exactly 80×80 in dimension. The target network comprised approximately 80 ROIs spanning four functional systems:
-
-- **Motor system**: primary motor cortex, premotor cortex, supplementary motor area (SMA), and frontal eye fields
-- **Basal ganglia**: caudate, putamen, globus pallidus, nucleus accumbens, and bilateral STN
-- **Executive/frontoparietal**: dorsolateral prefrontal cortex (DLPFC), inferior frontal junction (IFJ), inferior frontal sulcus (IFS), and ventrolateral prefrontal cortex (VLPFC)
-- **Cerebellum**: motor and action-observation lobules
 
