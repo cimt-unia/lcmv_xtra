@@ -79,6 +79,7 @@ def save_study_tensor(
     """
     Stacks data into a single 3D array: (Subjects, ROIs, Time).
     Automatically resamples all subjects to 'target_sfreq' for uniformity.
+    Uses polyphase filtering (resample_poly) for artifact-free resampling.
     """
     if not all_subject_data: raise ValueError("No data to stack.")
     
@@ -92,15 +93,26 @@ def save_study_tensor(
         current_sfreq = d['sfreq']
         
         if current_sfreq != target_sfreq:
-            # Calculate duration in seconds
-            duration_sec = tc.shape[1] / current_sfreq
+            # Use resample_poly for better handling of non-periodic biological signals
+            # It requires integer up/down sampling factors
             
-            # Calculate new number of samples
-            n_samples_new = int(np.round(duration_sec * target_sfreq))
+            # Calculate greatest common divisor to simplify the ratio
+            # Note: sfreqs might be floats (e.g. 1000.0), so we cast to int safely
+            up = int(target_sfreq)
+            down = int(current_sfreq)
             
-            # Use scipy.signal.resample (Fourier method) for high accuracy
-            # axis=1 because time is the second dimension (ROIs, Time)
-            tc_resampled = signal.resample(tc, n_samples_new, axis=1)
+            # Handle cases where sfreq might not be an integer multiple (rare but possible)
+            # If they are not integers, we fall back to calculating duration manually
+            if up == target_sfreq and down == current_sfreq:
+                gcd = np.gcd(up, down)
+                tc_resampled = signal.resample_poly(tc, up // gcd, down // gcd, axis=1)
+            else:
+                # Fallback for non-integer sfreqs: calculate duration and use resample
+                # This is less ideal but handles edge cases like 1024.0 Hz -> 250.0 Hz
+                duration_sec = tc.shape[1] / current_sfreq
+                n_samples_new = int(np.round(duration_sec * target_sfreq))
+                tc_resampled = signal.resample(tc, n_samples_new, axis=1)
+                
             resampled_data.append(tc_resampled)
         else:
             resampled_data.append(tc)
