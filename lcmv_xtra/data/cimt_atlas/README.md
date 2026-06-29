@@ -10,7 +10,7 @@ Source time courses were extracted for all regions of the **CIMT Unified Atlas**
 - **Nettekoven Cerebellar Atlas (32 ROIs).** A symmetric cerebellar parcellation was incorporated to capture cerebellar contributions to motor timing and bimanual coordination, which are well-documented but typically absent from cortical-only atlases.
 
 - **Custom STN Extraction (2 ROIs).** The left and right STN were explicitly represented using coordinate-based region extraction (5-mm radius spheres) centred on established MNI coordinates. This extraction was essential because the STN, the primary therapeutic target for DBS in PD, is insufficiently resolved in standard cortical atlases due to its small volume and deep location.
-- 
+
 <br>
 
 ## Atlas Profile (448 ROIs)
