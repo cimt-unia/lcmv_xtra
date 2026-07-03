@@ -248,7 +248,7 @@ def lcmv_beamformer(
     # LCMV beamformer
     log.info("Computing covariance and LCMV filters...")
     cov = mne.compute_raw_covariance(
-        input, method='oas', picks='eeg', rank='info', n_jobs=n_jobs, verbose=False
+        input, method='oas', picks='eeg', rank=None, n_jobs=n_jobs, verbose=False
     )
     filters = mne.beamformer.make_lcmv(
         info=input.info, forward=fwd, data_cov=cov, noise_cov=cov, reg=reg,
@@ -289,7 +289,7 @@ def execute_source_estimation(
     task,
     ica_file_path,
     fsaverage_dir,
-    reg=0.01,
+    reg=0.05,
     n_jobs=1,
     verbose=False
 ):
