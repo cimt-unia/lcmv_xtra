@@ -203,7 +203,7 @@ def lcmv_beamformer(
     output_dir,
     subject_id,
     task,
-    reg=0.01,
+    reg=0.05,
     n_jobs=1,
     verbose=False
 ):
