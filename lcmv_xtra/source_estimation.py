@@ -253,7 +253,7 @@ def lcmv_beamformer(
     filters = mne.beamformer.make_lcmv(
         info=input.info, forward=fwd, data_cov=cov, noise_cov=cov, reg=reg,
         pick_ori='max-power', weight_norm='unit-noise-gain',
-        reduce_rank=True, rank='info', verbose=False
+        reduce_rank=True, rank=None, verbose=False
     )
     log.info("Applying LCMV beamformer to data...")
     stc = mne.beamformer.apply_lcmv_raw(raw=input, filters=filters)
