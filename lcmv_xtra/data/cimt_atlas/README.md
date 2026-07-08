@@ -38,9 +38,9 @@ Source time courses were extracted for all regions of the **CIMT Unified Atlas**
 | Auditory | 14 | A1, belt, parabelt, association |
 | Temporal | 14 | TGd, TGv, TE1/TE2, STS |
 | Language | 10 | Broca, PSL, SFL, parainsular |
-| Social | 10 | Cerebellar social regions only |
-| Demand | 8 | Cerebellar demand regions only |
-| Action | 6 | Cerebellar action regions only |
+| Cerebellar | 10 | Cerebellar social regions only |
+| Cerebellar | 8 | Cerebellar demand regions only |
+| Cerebellar | 6 | Cerebellar action regions only |
 | Other | 2 | Gustatory cortex (R/L_43_ROI) |
 
 <br>
