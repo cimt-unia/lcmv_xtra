@@ -2,6 +2,8 @@
 
 The source estimation stage transforms cleaned sensor-level EEG data into anatomically localized brain activity using a Linearly Constrained Minimum Variance (LCMV) beamformer. Implemented via the `lcmv_xtra` package, this pipeline executes five sequential computational stages specifically optimized to maximize spatial fidelity for deep subcortical and limbic structures relevant to cue-reactivity analysis.
 
+<br>
+
 #### 1. Sensor Space Preparation and Coordinate Normalization
 Before source modeling, raw EEG data must be established in a standardized geometric frame. The pipeline loads ICA-cleaned FIF files and applies a custom BEL 280-channel montage derived from a bundled GPSC digitization file.
 
@@ -10,6 +12,8 @@ Before source modeling, raw EEG data must be established in a standardized geome
 -   **Unit Conversion:** Coordinates are converted from millimeters to meters. MNE’s forward solver operates exclusively in SI units; failure to convert would produce lead fields scaled incorrectly by a factor of 1000, rendering source amplitudes physically meaningless.
 -   **Fiducial Validation:** The pipeline explicitly verifies the presence of three anatomical landmarks (Nasion, Left Preauricular, Right Preauricular). These fiducials define the head coordinate frame origin and axes. Missing fiducials make coregistration mathematically undefined, triggering immediate failure to prevent misaligned reconstruction.
 -   **Reference Restoration:** An average reference projection is applied if absent. Average referencing restores the zero-sum electrical potential constraint that may have been altered during ICA cleaning. This constraint is mathematically necessary for accurate EEG forward modeling because the potential field must sum to zero across all sensors.
+
+<br>
 
 #### 2. Coregistration with Outlier-Robust ICP
 Coregistration aligns the EEG sensor array to the fsaverage MRI template. This is the most critical step for subcortical signal fidelity, as even small misalignments can displace deep sources by centimeters.
@@ -21,12 +25,16 @@ Coregistration aligns the EEG sensor array to the fsaverage MRI template. This i
     -   *Stage 2:* Twenty additional iterations with high nasion weighting (10.0) converge on the final transform using only inlier points. Elevated nasion weight anchors the anterior region where key subcortical structures of interest are located.
 -   **Quality Control:** Mean, median, and maximum coregistration errors are logged in millimeters. A mean error exceeding 5 mm triggers a warning, as this threshold represents the approximate boundary for reliable subcortical localization with high-density EEG.
 
+<br>
+
 #### 3. Volumetric Forward Solution Computation
 The forward model predicts what each EEG sensor would record given a unit current dipole at every location in the brain. Unlike surface-constrained approaches, this pipeline uses a **volumetric source space** to explicitly capture deep generators.
 
 -   **Source Space:** A 5 mm isotropic grid (`fsaverage-vol-5mm-src.fif`) spans the entire brain volume, including basal ganglia, thalamus, brainstem, and cerebellum. This ensures subcortical structures are modeled as independent dipoles rather than being erroneously projected onto the nearest cortical surface.
 -   **Boundary Element Model (BEM):** A three-layer BEM solution (`fsaverage-5120-5120-5120-bem-sol.fif`) models conductivity boundaries between brain, skull, and scalp. This accounts for the smearing effect of the skull on EEG signals, which is especially critical for accurately localizing deep sources whose signals must traverse multiple tissue layers.
 -   **Minimum Distance Constraint:** Sources within 5 mm of the inner skull boundary are excluded. Dipoles too close to conductivity discontinuities produce singular or near-singular lead field columns that destabilize beamformer inversion and create artifactual hotspots.
+
+<br>
 
 #### 4. LCMV Beamformer Filter Construction
 Spatial filters are computed to pass activity from each target voxel while suppressing interference from all other locations. Several design choices specifically address challenges of post-ICA EEG data and deep source recovery.
@@ -37,6 +45,8 @@ Spatial filters are computed to pass activity from each target voxel while suppr
 -   **Weight Normalization:** Unit-noise-gain normalization scales filter weights so that unit noise variance produces unit output variance at every voxel. This eliminates the well-known depth bias of beamformers, where superficial sources dominate simply because they generate larger sensor signals. Deep subcortical sources thereby receive equal statistical weight relative to cortical sources.
 -   **Rank Reduction:** `reduce_rank=True` removes zero-variance components from filter computation, preventing division-by-zero errors in degenerate subspaces without affecting the signal-bearing subspace.
 
+<br>
+
 #### 5. Source Time Course Extraction and Atlas Projection
 The final stage applies spatial filters to continuous EEG data and extracts region-specific time courses.
 
@@ -46,15 +56,4 @@ The final stage applies spatial filters to continuous EEG data and extracts regi
 
 <br>
 
-### Summary
 
-
-EEG sensors on the scalp record a blurred mixture of electrical activity from many brain regions simultaneously. Source estimation reverses this blurring through three conceptual steps:
-
-1.  **Build a Head Model:** We create a detailed 3D computer model of an average human head, including the brain, skull, and scalp. We place thousands of tiny virtual "test dipoles" throughout the entire brain volume—including deep structures like the thalamus and basal ganglia—and calculate what each sensor *would* record if that dipole were active. This is called the forward model.
-
-2.  **Align Sensors to Brain:** We precisely match the positions of our 280 EEG sensors to the 3D head model using anatomical landmarks and iterative refinement. This ensures that when we localize a signal, it maps to the correct anatomical structure rather than being displaced by centimeters.
-
-3.  **Unmix the Signals:** Using a mathematical technique called beamforming, we construct a unique spatial filter for each brain location. Each filter acts like a focused lens: it passes activity originating from its target voxel while actively suppressing activity from everywhere else. By applying all filters simultaneously, we decompose the mixed scalp signals into separate time courses for each of the 448 brain regions in our atlas. Special care is taken to ensure deep structures are not overshadowed by stronger cortical signals, and that the cleaning steps applied earlier do not introduce artificial distortions.
-
-The result is a set of condition-specific brain activation time courses that can be directly analyzed for frequency-band differences with anatomical specificity that scalp-level EEG cannot provide.
