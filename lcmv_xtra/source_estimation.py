@@ -22,14 +22,14 @@ def _setup_logger(subject_id, task, output_dir, verbose=False):
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
     logger.handlers.clear()
     
-    # File handler (always detailed)
+    # File handler 
     log_file = Path(output_dir) / f'{subject_id}_{task}_processing.log'
     fh = logging.FileHandler(log_file, mode='w')
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     logger.addHandler(fh)
     
-    # Console handler (respects verbose flag)
+    # Console handler 
     if verbose:
         ch = logging.StreamHandler()
         ch.setLevel(logging.INFO)
@@ -43,7 +43,7 @@ def load_subject(ica_file_path, gpsc_file_path, subject_id=None, logger=None):
     Load and preprocess subject data for source estimation.
     
     Parameters:
-        ica_file_path: Path to ICA-cleaned FIF file
+        ica_file_path: Path to FIF file
         gpsc_file_path: Path to .gpsc file  
         subject_id: Optional subject ID for logging
         logger: Logger instance (optional)
@@ -191,8 +191,13 @@ def _run_coregistration(raw, ch_pos, subject, subjects_dir, trans_file, logger):
     mean_err, median_err, max_err = np.mean(dists), np.median(dists), np.max(dists)
     log.info(f"Coregistration error (mm) - Mean: {mean_err:.2f}, Median: {median_err:.2f}, Max: {max_err:.2f}")
     
+        
     if mean_err > 5.0:
-        log.warning(f"Mean coregistration error {mean_err:.2f}mm exceeds 5mm threshold")
+    raise RuntimeError(
+        f"mean error {mean_err:.2f}mm exceeds 5mm threshold. "
+        f"Source estimation aborted. Check fiducial digitization and cap placement."
+    )
+    
     
     return trans, {'mean': mean_err, 'median': median_err, 'max': max_err}
 
@@ -261,7 +266,7 @@ def lcmv_beamformer(
     stc.save(stc_file, ftype='h5', overwrite=True)
     log.info(f"Saved source estimate: {stc.data.shape[0]} × {stc.data.shape[1]}")
 
-    # Metadata - ADD THE TWO PATHS HERE
+    # Metadata
     metadata = {
         'subject_id': subject_id,
         'task': task,
