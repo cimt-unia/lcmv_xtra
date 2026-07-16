@@ -193,11 +193,10 @@ def _run_coregistration(raw, ch_pos, subject, subjects_dir, trans_file, logger):
     
         
     if mean_err > 5.0:
-    raise RuntimeError(
-        f"mean error {mean_err:.2f}mm exceeds 5mm threshold. "
-        f"Source estimation aborted. Check fiducial digitization and cap placement."
-    )
-    
+        raise RuntimeError(
+            f"mean error {mean_err:.2f}mm exceeds 5mm threshold. "
+            f"Source estimation aborted. Check fiducial digitization and cap placement."
+        )
     
     return trans, {'mean': mean_err, 'median': median_err, 'max': max_err}
 
