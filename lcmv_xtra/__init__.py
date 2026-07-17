@@ -19,19 +19,13 @@ from .tensor import (
 from .custom_tensor import (
     assemble_custom_tensor,
     extract_custom_roi_time_courses,
-    save_custom_study_tensor
 )
 
 from .connectivity import (
-    # GT Connectivity
     compute_gt_motor_connectivity,
     compute_gt_full_connectivity,
     get_motor_roi_metadata,
-    
-    # DiFuMo Connectivity
     compute_difumo_connectivity,
-    
-    # CIMT Connectivity
     compute_cimt_full_connectivity,
     compute_cimt_motor_connectivity,
     get_cimt_motor_network_metadata
@@ -63,9 +57,8 @@ __all__ = [
     # Tensor / ML Aggregation (Custom MNI Coordinates)
     "assemble_custom_tensor",
     "extract_custom_roi_time_courses",
-    "save_custom_study_tensor",
     
-    # Connectivity Analysis (GT, DiFuMo, CIMT)
+    # Connectivity Analysis
     "compute_gt_motor_connectivity",
     "compute_gt_full_connectivity", 
     "get_motor_roi_metadata",
