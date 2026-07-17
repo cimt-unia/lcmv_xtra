@@ -1,5 +1,6 @@
 # lcmv_xtra/viz.py
 
+import json
 import numpy as np
 import matplotlib.pyplot as plt
 import nibabel as nib
@@ -8,10 +9,11 @@ import scipy.signal as signal
 from pathlib import Path
 from typing import Tuple, Optional
 from scipy.integrate import trapezoid
+from nilearn import image
 
 
 # Global configuration
-SFREQ = 500.0
+SFREQ = 500.0  # Fallback default only
 PSD_WINDOW_SEC = 2.0
 
 # Standard neurophysiological frequency bands (Hz)
@@ -24,6 +26,47 @@ FREQ_BANDS = {
     'Low_Gamma': (30, 50),
     'High_Gamma': (50, 100)
 }
+
+
+def _detect_sfreq(stc_path: str) -> float:
+    """
+    Auto-detect sampling frequency from source estimate or metadata.
+    Mirrors the logic in build_subject_npz.py's get_true_sfreq().
+    
+    Detection order:
+    1. STC time vector (most reliable, direct from data)
+    2. pipeline_metadata.json (from LCMV processing)
+    3. Global default (last resort)
+    """
+    # Method 1: Check STC time vector
+    try:
+        stc = mne.read_source_estimate(stc_path)
+        if stc.times is not None and len(stc.times) > 1:
+            dt = stc.times[1] - stc.times[0]
+            if dt > 0:
+                sfreq = 1.0 / dt
+                print(f"📡 Detected sfreq from STC: {sfreq:.1f} Hz")
+                return sfreq
+    except Exception:
+        pass
+    
+    # Method 2: Check metadata file
+    stc_dir = Path(stc_path).parent
+    json_path = stc_dir / "pipeline_metadata.json"
+    if json_path.exists():
+        try:
+            with open(json_path, 'r') as f:
+                metadata = json.load(f)
+            sfreq = metadata.get('sfreq_hz')
+            if sfreq is not None:
+                print(f"📡 Detected sfreq from metadata: {sfreq:.1f} Hz")
+                return float(sfreq)
+        except Exception:
+            pass
+    
+    # Method 3: Fallback default
+    print(f"⚠️  Could not auto-detect sfreq. Using default: {SFREQ} Hz")
+    return SFREQ
 
 
 def plot_mni_orthoview(
@@ -174,7 +217,7 @@ def visualize_source_at_coordinate(
     mni_coord: list,
     roi_name: str = "Custom ROI",
     base_dir: str = "/mnt/movement/users/jaizor/xtra/derivatives/_fs",
-    sfreq: float = SFREQ,
+    sfreq: Optional[float] = None,
     psd_method: str = 'welch',
     psd_color: str = "#4A3387",
     band_cmap: str = "Blues"
@@ -182,8 +225,8 @@ def visualize_source_at_coordinate(
     """
     Visualize PSD and brain location for a given MNI coordinate.
     
-    This is your QC function - use it BEFORE batch processing to verify
-    that your MNI coordinates target the correct brain regions.
+    Use this BEFORE batch processing to verify that your MNI coordinates
+    target the correct brain regions.
     
     Parameters
     ----------
@@ -195,8 +238,8 @@ def visualize_source_at_coordinate(
         Label for the region
     base_dir : str
         Directory containing fsaverage/ and source space files
-    sfreq : float
-        Sampling frequency (Hz)
+    sfreq : float or None
+        Sampling frequency (Hz). If None, auto-detected from STC file or metadata.
     psd_method : str
         'welch' or 'multitaper'
     psd_color : str
@@ -204,14 +247,20 @@ def visualize_source_at_coordinate(
     band_cmap : str
         Colormap for frequency band shading
     """
+    # =========================================================================
+    # FIX 1: Auto-detect or use provided sfreq
+    # =========================================================================
+    if sfreq is None:
+        sfreq = _detect_sfreq(stc_path)
+    
     # Load STC and source space
     stc = mne.read_source_estimate(stc_path)
     src_file = Path(base_dir) / "fsaverage-vol-5mm-src.fif"
     src = mne.read_source_spaces(str(src_file))
 
-    # Get active source coordinates (MNI mm) - using proper MNI transform
-    from nilearn import image
-    
+    # =========================================================================
+    # FIX 2: Proper MNI coordinate transformation (matching atlas_extraction.py)
+    # =========================================================================
     active_vertices = stc.vertices[0]
     src_rr = src[0]['rr'][active_vertices] * 1000  # m → mm
     
@@ -238,6 +287,8 @@ def visualize_source_at_coordinate(
     print(f"Closest active source: [{actual_coord[0]:.1f}, "
           f"{actual_coord[1]:.1f}, {actual_coord[2]:.1f}] "
           f"(dist: {distances[best_idx_in_active]:.1f} mm)")
+    print(f"Sampling frequency: {sfreq:.1f} Hz")
+    print(f"Duration: {len(stc.times) / sfreq:.1f} seconds")
 
     # Plot orthoview
     plot_mni_orthoview(
@@ -292,7 +343,7 @@ def visualize_source_at_coordinate(
                 color='dimgray', alpha=0.85, fontweight='regular')
 
     # Formatting
-    y_label = f"PSD (log₁₀) - {psd_method.capitalize()}"
+    y_label = f"PSD (log₁₀) - {psd_method.capitalize()} ({sfreq:.0f} Hz)"
     ax.set_xlabel("Frequency (Hz)", fontsize=11)
     ax.set_ylabel(y_label, fontsize=11)
     ax.set_yscale('log')
