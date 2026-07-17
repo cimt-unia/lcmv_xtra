@@ -8,11 +8,18 @@ from .utils import download_fsaverage
 from .atlas_extraction import gt_extraction, difumo_extraction
 from .cimt_atlas import cimt_extraction
 
-# Tensor / ML Aggregation
+# Tensor / ML Aggregation (Standard - Atlas based)
 from .tensor import (
     scan_eeg_paths,      
     save_study_tensor,
     assemble_tensor       
+)
+
+# Tensor / ML Aggregation (Custom - MNI coordinate based)
+from .custom_tensor import (
+    assemble_custom_tensor,
+    extract_custom_roi_time_courses,
+    save_custom_study_tensor
 )
 
 from .connectivity import (
@@ -24,7 +31,7 @@ from .connectivity import (
     # DiFuMo Connectivity
     compute_difumo_connectivity,
     
-    # CIMT Connectivity (NEW)
+    # CIMT Connectivity
     compute_cimt_full_connectivity,
     compute_cimt_motor_connectivity,
     get_cimt_motor_network_metadata
@@ -36,7 +43,7 @@ from .viz import (
     compute_psd
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     # Core Pipeline
@@ -48,10 +55,15 @@ __all__ = [
     "difumo_extraction",
     "cimt_extraction",  
     
-    # Tensor / ML Aggregation
+    # Tensor / ML Aggregation (Standard)
     "scan_eeg_paths",      
     "save_study_tensor",
     "assemble_tensor",     
+    
+    # Tensor / ML Aggregation (Custom MNI Coordinates)
+    "assemble_custom_tensor",
+    "extract_custom_roi_time_courses",
+    "save_custom_study_tensor",
     
     # Connectivity Analysis (GT, DiFuMo, CIMT)
     "compute_gt_motor_connectivity",
