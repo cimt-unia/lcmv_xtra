@@ -1,0 +1,606 @@
+# lcmv_xtra/custom_tensor.py
+
+import os
+import logging
+import numpy as np
+import pandas as pd
+import mne
+from pathlib import Path
+from scipy import signal
+from typing import Dict, List, Tuple, Optional, Literal
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from nilearn import image
+
+from lcmv_xtra.source_estimation import execute_source_estimation
+from lcmv_xtra.tensor import scan_eeg_paths
+
+logger = logging.getLogger(__name__)
+
+METERS_TO_MILLIMETERS: float = 1000.0
+DEFAULT_RADIUS_MM: float = 5.0
+DEFAULT_TARGET_SFREQ: float = 250.0
+
+# Example configurations - users can define their own
+MNI_ROIS_CONFIG: Dict[str, List[float]] = {
+    "R1": [10.958, 5.563, -4.948],
+    "R2": [28.304, 24.100, -17.535],
+    "L1": [-15.983, 6.077, 0.027],
+    "L2": [-14.719, -2.180, -0.865]
+}
+
+
+def _get_mni_coordinates_from_src(stc, src):
+    """
+    Convert source space coordinates to MNI space.
+    This is CRITICAL: src[0]['rr'] is in MRI coordinates (surface RAS),
+    NOT MNI space. We must transform using the mri_ras_t matrix.
+    
+    EXACTLY matches the logic from atlas_extraction._get_mni_coordinates
+    """
+    vertices = stc.vertices[0]
+    src_rr = src[0]['rr'][vertices] * METERS_TO_MILLIMETERS  # m → mm
+
+    try:
+        trans = src[0]['mri_ras_t']['trans']
+    except KeyError:
+        raise ValueError(
+            "Source space missing 'mri_ras_t' transform. "
+            "Ensure it's a proper volume source space (fsaverage-vol-5mm-src.fif)."
+        )
+
+    mni_coords = image.coord_transform(
+        src_rr[:, 0], src_rr[:, 1], src_rr[:, 2], trans
+    )
+    return np.array(mni_coords).T
+
+
+def extract_custom_roi_time_courses(
+    stc: mne.SourceEstimate,
+    src: mne.SourceSpaces,
+    roi_coordinates: Dict[str, List[float]],
+    radius_mm: float = DEFAULT_RADIUS_MM,
+    mode: Literal["sphere", "single"] = "sphere",
+    log: Optional[logging.Logger] = None
+) -> Tuple[np.ndarray, List[str]]:
+    """
+    Extract time courses from user-defined MNI coordinates.
+    
+    Parameters
+    ----------
+    stc : mne.SourceEstimate
+        Source estimate from LCMV beamforming
+    src : mne.SourceSpaces
+        Volume source space (fsaverage-vol-5mm-src.fif)
+    roi_coordinates : Dict[str, List[float]]
+        Dictionary mapping ROI names to MNI coordinates [x, y, z] in mm
+    radius_mm : float
+        Radius (in mm) for spherical ROI. Only used in "sphere" mode.
+        Default: 5.0 mm (appropriate for deep brain structures like STN)
+    mode : str
+        Extraction mode:
+        - "sphere": Average all voxels within radius_mm (default)
+        - "single":  Extract only the single closest voxel
+    log : logging.Logger, optional
+        Logger instance
+        
+    Returns
+    -------
+    time_courses : np.ndarray
+        Array of shape (n_rois, n_times)
+    roi_names : List[str]
+        List of ROI names in order
+        
+    Examples
+    --------
+    # Spherical averaging (5mm radius) - good for deep structures
+    tc, names = extract_custom_roi_time_courses(
+        stc, src, {"L_STN": [-11.89, -14.51, -6.40]}, 
+        mode="sphere", radius_mm=5.0
+    )
+    
+    # Single voxel - good for cortical targets
+    tc, names = extract_custom_roi_time_courses(
+        stc, src, {"L_M1": [-40.0, -12.5, 66.0]}, 
+        mode="single"
+    )
+    """
+    if log is None:
+        log = logging.getLogger(__name__)
+    
+    valid_modes = ["sphere", "single"]
+    if mode not in valid_modes:
+        raise ValueError(f"mode must be one of {valid_modes}, got '{mode}'")
+    
+    log.info(f"Custom MNI ROI extraction: {len(roi_coordinates)} ROIs, mode='{mode}'" + 
+             (f", radius={radius_mm}mm" if mode == "sphere" else ""))
+    
+    # Handle complex-valued source estimates consistently (matching atlas_extraction.py)
+    stc_data = np.abs(stc.data) if np.iscomplexobj(stc.data) else stc.data
+    
+    # CRITICAL: Get coordinates in MNI space, not MRI space
+    active_coords_mni = _get_mni_coordinates_from_src(stc, src)
+    
+    # Validate shape consistency
+    if stc_data.shape[0] != active_coords_mni.shape[0]:
+        raise ValueError(
+            f"Shape mismatch: stc_data has {stc_data.shape[0]} sources, "
+            f"but {active_coords_mni.shape[0]} MNI coordinates found"
+        )
+    
+    log.info(f"Source space: {stc_data.shape[0]} active sources, "
+             f"{stc_data.shape[1]} timepoints")
+    
+    time_courses: List[np.ndarray] = []
+    roi_names: List[str] = []
+    
+    for roi_name, target_mni in roi_coordinates.items():
+        target = np.array(target_mni, dtype=np.float64)
+        
+        # Compute Euclidean distances in MNI space
+        distances = np.linalg.norm(active_coords_mni - target, axis=1)
+        
+        if mode == "single":
+            # === SINGLE VOXEL MODE ===
+            # Select only the closest voxel (matches your build_subject_npz.py single voxel logic)
+            best_idx = np.argmin(distances)
+            closest_dist = distances[best_idx]
+            selected_indices = np.array([best_idx])
+            
+            log.info(
+                f"  🎯 {roi_name}: requested {target_mni}, "
+                f"closest [{active_coords_mni[best_idx][0]:.1f}, "
+                f"{active_coords_mni[best_idx][1]:.1f}, "
+                f"{active_coords_mni[best_idx][2]:.1f}] "
+                f"(dist: {closest_dist:.1f} mm)"
+            )
+            
+        else:  # mode == "sphere"
+            # === SPHERICAL AVERAGING MODE ===
+            # Select all voxels within radius (matches your build_subject_npz.py sphere logic)
+            selected_indices = np.where(distances <= radius_mm)[0]
+            
+            if selected_indices.size == 0:
+                # Fallback to closest voxel if no voxels within radius
+                closest_idx = np.argmin(distances)
+                closest_dist = distances[closest_idx]
+                log.warning(
+                    f"  ⚠️  {roi_name}: No voxels within {radius_mm}mm. "
+                    f"Using closest voxel at {closest_dist:.1f}mm"
+                )
+                selected_indices = np.array([closest_idx])
+                n_voxels = 1
+            else:
+                n_voxels = selected_indices.size
+                min_dist = distances[selected_indices].min()
+                mean_dist = distances[selected_indices].mean()
+                max_dist = distances[selected_indices].max()
+                log.info(
+                    f"  🔵 {roi_name}: {n_voxels} voxels averaged "
+                    f"(dists: {min_dist:.1f}-{max_dist:.1f}mm, mean: {mean_dist:.1f}mm, "
+                    f"radius: {radius_mm}mm)"
+                )
+        
+        # Extract and average time courses
+        roi_data = stc_data[selected_indices, :].mean(axis=0).astype(np.float32)
+        time_courses.append(roi_data)
+        roi_names.append(roi_name)
+    
+    log.info(f"✅ Extraction complete: {len(roi_names)} ROI time courses "
+             f"({stc_data.shape[1]} timepoints each)")
+    
+    return np.vstack(time_courses), roi_names
+
+
+def _process_single_subject_custom(args: tuple) -> dict:
+    """
+    Process a single subject: source estimation → custom ROI extraction.
+    
+    This replaces the atlas-based extraction with coordinate-based ROIs.
+    Works in parallel via ProcessPoolExecutor.
+    """
+    (sid, fif_path, task_name, project_base, fs_dir, 
+     roi_coordinates, radius_mm, mode, verbose) = args
+    
+    # Create a subject-specific logger
+    subject_logger = logging.getLogger(f"custom_tensor.{sid}")
+    subject_logger.setLevel(logging.DEBUG if verbose else logging.INFO)
+    
+    try:
+        # Step 1: Run source estimation (same as original pipeline)
+        subject_logger.info(f"Starting source estimation for {sid}")
+        metadata = execute_source_estimation(
+            project_base=project_base,
+            subject_id=sid,
+            task=task_name,
+            ica_file_path=fif_path,
+            fsaverage_dir=fs_dir,
+            verbose=verbose
+        )
+        
+        # Step 2: Load the source estimate and source space
+        stc_file = Path(metadata['subject_output']) / "source_estimate_LCMV.h5"
+        src_file = Path(fs_dir) / "fsaverage-vol-5mm-src.fif"
+        
+        if not stc_file.exists():
+            raise FileNotFoundError(f"Source estimate not found: {stc_file}")
+        if not src_file.exists():
+            raise FileNotFoundError(f"Source space not found: {src_file}")
+        
+        subject_logger.info(f"Loading source estimate from {stc_file.name}")
+        stc = mne.read_source_estimate(str(stc_file))
+        src = mne.read_source_spaces(str(src_file))
+        
+        # Step 3: Extract custom ROI time courses (COORDINATE-BASED, NO ATLAS!)
+        tc, roi_names = extract_custom_roi_time_courses(
+            stc=stc,
+            src=src,
+            roi_coordinates=roi_coordinates,
+            radius_mm=radius_mm,
+            mode=mode,
+            log=subject_logger
+        )
+        
+        # Validate output
+        if tc.shape[0] != len(roi_coordinates):
+            raise ValueError(
+                f"Expected {len(roi_coordinates)} ROIs, got {tc.shape[0]}"
+            )
+        
+        return {
+            "subject_id": sid,
+            "time_courses": tc,
+            "roi_names": roi_names,
+            "sfreq": metadata['sfreq_hz'],
+            "n_timepoints": tc.shape[1],
+            "success": True
+        }
+        
+    except Exception as e:
+        subject_logger.error(f"❌ Failed {sid}: {e}", exc_info=verbose)
+        return {"subject_id": sid, "success": False}
+
+
+def _resample_time_course(
+    time_course: np.ndarray, 
+    current_sfreq: float, 
+    target_sfreq: float
+) -> np.ndarray:
+    """
+    Resample time course to target sampling frequency.
+    Uses polyphase filtering when possible for artifact-free resampling.
+    """
+    if current_sfreq == target_sfreq:
+        return time_course
+        
+    up = int(target_sfreq)
+    down = int(current_sfreq)
+    
+    if up == target_sfreq and down == current_sfreq:
+        greatest_common_divisor = np.gcd(up, down)
+        return signal.resample_poly(
+            time_course, 
+            up // greatest_common_divisor, 
+            down // greatest_common_divisor, 
+            axis=1
+        )
+    
+    # Fallback for non-integer frequencies
+    duration_sec = time_course.shape[1] / current_sfreq
+    n_samples_new = int(np.round(duration_sec * target_sfreq))
+    return signal.resample(time_course, n_samples_new, axis=1)
+
+
+def save_custom_study_tensor(
+    all_subject_data: List[dict], 
+    task_name: str, 
+    output_dir: Path,
+    target_sfreq: float,
+    roi_names: List[str],
+    extraction_mode: str
+) -> Path:
+    """
+    Stack subject data into a 3D tensor and save as compressed .npz file.
+    
+    Output shape: (n_subjects, n_rois, n_timepoints)
+    """
+    if not all_subject_data:
+        raise ValueError("No valid subject data available to stack.")
+        
+    output_dir.mkdir(parents=True, exist_ok=True)
+    resampled_data = []
+    
+    # Resample all subjects to target frequency
+    for subject_data in all_subject_data:
+        resampled_tc = _resample_time_course(
+            time_course=subject_data['time_courses'],
+            current_sfreq=subject_data['sfreq'],
+            target_sfreq=target_sfreq
+        )
+        resampled_data.append(resampled_tc)
+        
+    # Truncate to shortest time series for uniform shape
+    min_timepoints = min(arr.shape[1] for arr in resampled_data)
+    truncated_data = [arr[:, :min_timepoints] for arr in resampled_data]
+    
+    # Stack into 3D array
+    stacked_data = np.stack(truncated_data)
+    subject_ids = np.array([d['subject_id'] for d in all_subject_data])
+    
+    # Save with metadata
+    mode_suffix = "_sphere" if extraction_mode == "sphere" else "_singlevoxel"
+    output_path = output_dir / f"study_{task_name}_custom_rois{mode_suffix}.npz"
+    
+    np.savez_compressed(
+        output_path, 
+        data=stacked_data, 
+        subject_ids=subject_ids, 
+        roi_names=np.array(roi_names),
+        sfreq=target_sfreq,
+        extraction_mode=extraction_mode
+    )
+    
+    logger.info(
+        f"✅ Saved 3D Tensor: {stacked_data.shape} "
+        f"({stacked_data.shape[0]} subjects × {stacked_data.shape[1]} ROIs × {stacked_data.shape[2]} timepoints) "
+        f"at {target_sfreq} Hz\n   Mode: {extraction_mode}\n   File: {output_path}"
+    )
+    return output_path
+
+
+def assemble_custom_tensor(
+    data_index: pd.DataFrame,
+    fs_dir: Path,
+    output_dir: Path,
+    roi_coordinates: Dict[str, List[float]],
+    task_name: str = "study",
+    project_base: Optional[Path] = None,
+    radius_mm: float = DEFAULT_RADIUS_MM,
+    mode: Literal["sphere", "single"] = "sphere",
+    n_jobs: int = -1,
+    verbose: bool = False,
+    target_sfreq: float = DEFAULT_TARGET_SFREQ
+) -> Optional[Path]:
+    """
+    Main pipeline: Source estimation → Custom MNI ROI extraction → 3D Tensor.
+    
+    Parameters
+    ----------
+    data_index : pd.DataFrame
+        DataFrame with columns 'subject_id' and 'fif_path'
+    fs_dir : Path
+        Path to fsaverage directory (must contain fsaverage-vol-5mm-src.fif)
+    output_dir : Path
+        Output directory for the tensor file
+    roi_coordinates : Dict[str, List[float]]
+        Dictionary mapping ROI names to MNI coordinates [x, y, z] in mm
+        Example: {"L_M1": [-40.0, -12.5, 66.0], "R_M1": [40.0, -12.5, 66.0]}
+    task_name : str
+        Task identifier for output filename
+    project_base : Path, optional
+        Base project directory (default: current working directory)
+    radius_mm : float
+        Radius in mm for spherical ROI averaging. Default: 5.0 mm
+        Only used when mode="sphere"
+    mode : str
+        Extraction mode:
+        - "sphere": Average all voxels within radius_mm (default, good for deep structures)
+        - "single": Extract only the single closest voxel (good for cortical targets)
+    n_jobs : int
+        Number of parallel workers (-1 = all cores)
+    verbose : bool
+        Enable verbose logging
+    target_sfreq : float
+        Target sampling frequency for output tensor (default: 250 Hz)
+    
+    Returns
+    -------
+    Optional[Path]
+        Path to the saved tensor file, or None if no subjects were processed
+        
+    Examples
+    --------
+    # Single voxel extraction for cortical ROIs
+    tensor_path = assemble_custom_tensor(
+        data_index=df,
+        fs_dir=FS_DIR,
+        output_dir=OUT_DIR,
+        roi_coordinates={"L_M1": [-40.0, -12.5, 66.0], "R_M1": [40.0, -12.5, 66.0]},
+        mode="single"
+    )
+    
+    # Spherical averaging for deep structures (5mm radius)
+    tensor_path = assemble_custom_tensor(
+        data_index=df,
+        fs_dir=FS_DIR,
+        output_dir=OUT_DIR,
+        roi_coordinates={"L_STN": [-11.89, -14.51, -6.40], "R_STN": [12.53, -13.97, -6.57]},
+        mode="sphere",
+        radius_mm=5.0
+    )
+    """
+    if data_index.empty:
+        logger.warning("Empty data index provided. Nothing to process.")
+        return None
+        
+    if project_base is None:
+        project_base = Path.cwd()
+    
+    # Validate ROI coordinates
+    if not roi_coordinates:
+        raise ValueError("roi_coordinates dictionary cannot be empty")
+    
+    for name, coords in roi_coordinates.items():
+        if len(coords) != 3:
+            raise ValueError(f"ROI '{name}' must have exactly 3 coordinates [x, y, z], got {len(coords)}")
+    
+    # Validate mode
+    valid_modes = ["sphere", "single"]
+    if mode not in valid_modes:
+        raise ValueError(f"mode must be one of {valid_modes}, got '{mode}'")
+    
+    logger.info(f"{'='*60}")
+    logger.info(f"Custom MNI ROI Tensor Assembly: {task_name}")
+    logger.info(f"ROIs: {list(roi_coordinates.keys())}")
+    logger.info(f"Mode: {mode}" + (f", Radius: {radius_mm}mm" if mode == "sphere" else ""))
+    logger.info(f"Target SFreq: {target_sfreq} Hz")
+    logger.info(f"{'='*60}")
+
+    # Build task list for parallel processing
+    tasks = [
+        (
+            row['subject_id'], 
+            Path(row['fif_path']), 
+            task_name, 
+            project_base, 
+            fs_dir, 
+            roi_coordinates,
+            radius_mm,
+            mode,
+            verbose
+        )
+        for _, row in data_index.iterrows()
+    ]
+
+    all_subject_data = []
+    worker_count = os.cpu_count() if n_jobs == -1 else n_jobs
+    
+    logger.info(f"Processing {len(tasks)} subjects with {worker_count} workers...")
+
+    # Parallel execution
+    with ProcessPoolExecutor(max_workers=worker_count) as executor:
+        future_to_sid = {
+            executor.submit(_process_single_subject_custom, task): task[0] 
+            for task in tasks
+        }
+        
+        for future in as_completed(future_to_sid):
+            result = future.result()
+            if result.get('success'):
+                all_subject_data.append(result)
+                logger.info(f"✓ {result['subject_id']}: "
+                           f"{result['time_courses'].shape[0]} ROIs × {result['n_timepoints']} timepoints")
+            else:
+                logger.warning(f"✗ {future_to_sid[future]} failed")
+
+    if not all_subject_data:
+        logger.warning("No subjects processed successfully. Tensor assembly aborted.")
+        return None
+
+    # Save stacked tensor
+    roi_names = all_subject_data[0]['roi_names']
+    return save_custom_study_tensor(
+        all_subject_data=all_subject_data, 
+        task_name=task_name, 
+        output_dir=output_dir, 
+        target_sfreq=target_sfreq,
+        roi_names=roi_names,
+        extraction_mode=mode
+    )
+
+
+# =============================================================================
+# USAGE EXAMPLES
+# =============================================================================
+if __name__ == "__main__":
+    """
+    Example usage demonstrating both extraction modes.
+    """
+    from pathlib import Path
+    
+    # Configuration
+    CLEAN_DIR = Path("/path/to/cleaned/eeg/data")
+    FS_DIR = Path("/path/to/fsaverage/resources")
+    OUTPUT_DIR = Path("./custom_roi_tensors")
+    PROJECT_BASE = Path("/path/to/project")
+    
+    # Define ROIs for motor network
+    motor_rois = {
+        "L_M1":  [-40.0,  -12.5,   66.0],   # Left primary motor cortex (hand area)
+        "R_M1":  [ 40.0,  -12.5,   66.0],   # Right primary motor cortex (hand area)
+        "L_STN": [-11.89, -14.51,  -6.40],   # Left subthalamic nucleus
+        "R_STN": [ 12.53, -13.97,  -6.57],   # Right subthalamic nucleus
+    }
+    
+    # Scan for EEG files
+    df_subjects = scan_eeg_paths(CLEAN_DIR, pattern="*_c_eeg_mkit_cleaned.fif")
+    
+    if not df_subjects.empty:
+        print(f"Found {len(df_subjects)} subjects")
+        
+        # =====================================================================
+        # OPTION 1: Spherical averaging (5mm radius)
+        # Good for deep structures like STN where signal is more distributed
+        # =====================================================================
+        print("\n>>> Option 1: Spherical averaging (5mm radius)")
+        tensor_path_sphere = assemble_custom_tensor(
+            data_index=df_subjects,
+            fs_dir=FS_DIR,
+            output_dir=OUTPUT_DIR,
+            roi_coordinates=motor_rois,
+            task_name="motor_network",
+            project_base=PROJECT_BASE,
+            mode="sphere",       # Average all voxels within radius
+            radius_mm=5.0,       # 5mm radius (appropriate for deep sources)
+            n_jobs=-1,
+            target_sfreq=250.0,
+            verbose=True
+        )
+        
+        # =====================================================================
+        # OPTION 2: Single voxel extraction
+        # Good for cortical targets where you want precise localization
+        # =====================================================================
+        print("\n>>> Option 2: Single voxel extraction")
+        tensor_path_single = assemble_custom_tensor(
+            data_index=df_subjects,
+            fs_dir=FS_DIR,
+            output_dir=OUTPUT_DIR,
+            roi_coordinates=motor_rois,
+            task_name="motor_network",
+            project_base=PROJECT_BASE,
+            mode="single",       # Only the closest voxel
+            n_jobs=-1,
+            target_sfreq=250.0,
+            verbose=True
+        )
+        
+        # =====================================================================
+        # OPTION 3: Mixed approach (cortical = single, deep = sphere)
+        # Run twice with different ROI sets
+        # =====================================================================
+        print("\n>>> Option 3: Mixed approach")
+        
+        # Cortical ROIs (single voxel)
+        cortical_rois = {
+            "L_M1": [-40.0, -12.5, 66.0],
+            "R_M1": [40.0, -12.5, 66.0],
+        }
+        tensor_cortical = assemble_custom_tensor(
+            data_index=df_subjects,
+            fs_dir=FS_DIR,
+            output_dir=OUTPUT_DIR,
+            roi_coordinates=cortical_rois,
+            task_name="cortical_motor",
+            project_base=PROJECT_BASE,
+            mode="single",
+            n_jobs=-1
+        )
+        
+        # Deep ROIs (spherical averaging)
+        deep_rois = {
+            "L_STN": [-11.89, -14.51, -6.40],
+            "R_STN": [12.53, -13.97, -6.57],
+        }
+        tensor_deep = assemble_custom_tensor(
+            data_index=df_subjects,
+            fs_dir=FS_DIR,
+            output_dir=OUTPUT_DIR,
+            roi_coordinates=deep_rois,
+            task_name="deep_structures",
+            project_base=PROJECT_BASE,
+            mode="sphere",
+            radius_mm=5.0,
+            n_jobs=-1
+        )
+        
+        print("\n✅ All tensors saved!")
