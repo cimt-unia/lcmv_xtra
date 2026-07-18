@@ -31,10 +31,10 @@ from .connectivity import (
     get_cimt_motor_network_metadata
 )
 
-from .viz import (  
-    visualize_source_at_coordinate,
+from .viz import (
     plot_mni_orthoview,
-    compute_psd
+    plot_cimt_rois,
+    plot_group_psd_comparison,
 )
 
 __version__ = "0.2.0"
@@ -67,8 +67,8 @@ __all__ = [
     "compute_cimt_motor_connectivity",     
     "get_cimt_motor_network_metadata",     
     
-    # Visualization & Utils
-    "visualize_source_at_coordinate",  
+    # Visualization
     "plot_mni_orthoview",
-    "compute_psd"
+    "plot_cimt_rois",
+    "plot_group_psd_comparison",
 ]
