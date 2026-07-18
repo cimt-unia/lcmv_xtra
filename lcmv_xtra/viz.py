@@ -210,9 +210,9 @@ def plot_cimt_rois(
 def plot_group_psd_comparison(
     condition_one_path: str,
     condition_two_path: str,
+    roi_indices: List[int],
     label_one: str = "Condition 1",
     label_two: str = "Condition 2",
-    roi_indices: Optional[List[int]] = None,
     roi_names: Optional[List[str]] = None,
     sfreq: Optional[float] = None,
     freq_max: float = 50.0,
@@ -232,13 +232,12 @@ def plot_group_psd_comparison(
     condition_one_path, condition_two_path : str or Path
         Paths to .npz files from assemble_tensor() or assemble_custom_tensor().
         Each must contain 'data' (subjects, ROIs, time) and 'sfreq'.
+    roi_indices : list of int
+        Which ROI indices to plot. Required — no default.
     label_one, label_two : str
         Display names for the two conditions.
-    roi_indices : list of int, optional
-        Which ROI indices to plot. If None, plots all ROIs.
     roi_names : list of str, optional
-        Names for each ROI index. If None, uses generic names.
-        For CIMT tensors, this can be loaded from the bundled CSV.
+        Names for each ROI index. Auto-detected from .npz if None.
     sfreq : float, optional
         Sampling frequency. Auto-detected from .npz if None.
     freq_max : float
@@ -262,13 +261,10 @@ def plot_group_psd_comparison(
     -------
     list of plt.Figure
     """
-    import logging
-    logger = logging.getLogger(__name__)
-
     cond_one = np.load(condition_one_path, allow_pickle=True)
     cond_two = np.load(condition_two_path, allow_pickle=True)
 
-    data_one = cond_one['data']   # (subjects, ROIs, time)
+    data_one = cond_one['data']
     data_two = cond_two['data']
 
     if sfreq is None:
@@ -281,22 +277,20 @@ def plot_group_psd_comparison(
             f"ROI count mismatch: {data_one.shape[1]} vs {data_two.shape[1]}"
         )
 
-    # Determine which ROIs to plot
-    if roi_indices is None:
-        roi_indices = list(range(n_rois))
+    for idx in roi_indices:
+        if idx < 0 or idx >= n_rois:
+            raise ValueError(f"ROI index {idx} out of range (0-{n_rois-1})")
+
     if roi_names is None:
-        # Try to get from .npz (custom tensor) or use generic
         if 'roi_names' in cond_one:
             all_names = list(cond_one['roi_names'])
         else:
             all_names = [f"ROI_{i}" for i in range(n_rois)]
         roi_names = [all_names[i] for i in roi_indices]
 
-    # Average across subjects
-    mean_one = np.nanmean(data_one, axis=0)  # (ROIs, time)
+    mean_one = np.nanmean(data_one, axis=0)
     mean_two = np.nanmean(data_two, axis=0)
 
-    # PSD bands for shading
     bands = [
         (1, 4, 'Delta', '#90B3F9'),
         (4, 8, 'Theta', '#FFF9B2'),
@@ -315,7 +309,6 @@ def plot_group_psd_comparison(
         sig_one = mean_one[roi_idx]
         sig_two = mean_two[roi_idx]
 
-        # Compute PSDs
         freqs, psd_one_lin = signal.welch(
             sig_one, fs=sfreq, nperseg=nperseg, noverlap=noverlap, window='hann'
         )
@@ -323,7 +316,6 @@ def plot_group_psd_comparison(
             sig_two, fs=sfreq, nperseg=nperseg, noverlap=noverlap, window='hann'
         )
 
-        # Delta alignment
         mask_ref = (freqs >= ref_band[0]) & (freqs <= ref_band[1])
         ref_one = psd_one_lin[mask_ref].mean()
         ref_two = psd_two_lin[mask_ref].mean()
@@ -332,7 +324,6 @@ def plot_group_psd_comparison(
         psd_one_db = 10 * np.log10(psd_one_lin + eps)
         psd_two_db = 10 * np.log10(psd_two_lin + eps) + offset
 
-        # Plot
         fig, ax = plt.subplots(figsize=(10, 4))
         mask_freq = freqs <= freq_max
 
@@ -362,7 +353,7 @@ def plot_group_psd_comparison(
             save_path = Path(save_to)
             fig.savefig(
                 save_path.parent / f"{save_path.stem}_ROI_{roi_idx}.png",
-                dpi=150, bbox_inches='tight'
+                dpi=150, bbox_inches='tight',
             )
 
         figures.append(fig)
@@ -373,3 +364,4 @@ def plot_group_psd_comparison(
             plt.close(fig)
 
     return figures
+
