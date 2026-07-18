@@ -79,9 +79,11 @@ def plot_coregistration(
             fid_mri[name] = (head_to_mri @ coord_homog.T).T[:, :3].astype(np.float32)[0]
 
     # k3d plot
+
     plot = k3d.plot(
         name=f"Coregistration — {subject_id} ({coreg_error:.2f} mm)",
         height=600,
+        up='z',
     )
 
     # Head mesh
