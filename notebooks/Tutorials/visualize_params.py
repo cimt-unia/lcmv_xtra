@@ -60,7 +60,7 @@ plot_cimt_rois([7, 187], label_type="full", save_to="motor_cortex.png")
 # ---------------------------------------------------------------------------
 from lcmv_xtra import plot_group_psd_comparison
 
-EEG_DIR = "/mnt/movement/users/jaizor/xtra/derivatives/ocd/trials/dp02/eeg_tensor"
+EEG_DIR = "/eeg_tensor"
 
 # Bare minimum — only required parameters
 plot_group_psd_comparison(
