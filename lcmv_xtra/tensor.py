@@ -188,74 +188,35 @@ def assemble_tensor(
     return None
 
 '''
-# Usage Example
-
+# Usage Examples
 
 import lcmv_xtra as lx
 from pathlib import Path
 
-# =============================================================================
-# 1. CONFIGURATION
-# =============================================================================
-CLEAN_DIR = Path("/mnt/movement/users/jaizor/xtra/derivatives/eeg/rest/clean")
-FS_DIR = Path("/mnt/movement/users/jaizor/xtra/derivatives/_fs")
-OUTPUT_DIR = Path("./ml_data")
-PROJECT_BASE = Path("/mnt/movement/users/jaizor/xtra")
+FS_DIR = Path("path/to/fsaverage")
+OUTPUT_DIR = Path("path/to/output")
+PROJECT_BASE = Path("path/to/project")
 
-# =============================================================================
-# 2. BUILD TENSORS (One per condition)
-# =============================================================================
+# --- Method 1: Auto-scan a directory ---
+CLEAN_DIR = Path("path/to/cleaned/files")
+df = lx.scan_eeg_paths(CLEAN_DIR, pattern="*_resting_cleaned.fif")
+lx.assemble_tensor(df, FS_DIR, OUTPUT_DIR, task_name="resting", project_base=PROJECT_BASE)
 
-# --- LEFT HAND ---
-print(">>> Processing Left Hand...")
-df_left = lx.scan_eeg_paths(CLEAN_DIR, pattern="*_l_eeg_mkit_cleaned.fif")
+# --- Method 2: Manual list of paths ---
+df = lx.make_subject_list(
+    paths=[
+        "/data/sub-01_resting.fif",
+        "/data/sub-02_resting.fif",
+    ],
+    ids=["sub-01", "sub-02"]  # optional, defaults to sub-00, sub-01, ...
+)
+lx.assemble_tensor(df, FS_DIR, OUTPUT_DIR, task_name="resting", project_base=PROJECT_BASE)
 
-if not df_left.empty:
-    lx.assemble_tensor(
-        data_index=df_left,
-        fs_dir=FS_DIR,
-        output_dir=OUTPUT_DIR,
-        task_name="left_hand", # Saves as study_left_hand.npz
-        project_base=PROJECT_BASE,
-        n_jobs=-1,
-        target_sfreq=250.0 # Force 250 Hz
-    )
-else:
-    print("No Left Hand files found.")
-
-# --- RIGHT HAND ---
-print("\n>>> Processing Right Hand...")
-df_right = lx.scan_eeg_paths(CLEAN_DIR, pattern="*_r_eeg_mkit_cleaned.fif")
-
-if not df_right.empty:
-    lx.assemble_tensor(
-        data_index=df_right,
-        fs_dir=FS_DIR,
-        output_dir=OUTPUT_DIR,
-        task_name="right_hand", # Saves as study_right_hand.npz
-        project_base=PROJECT_BASE,
-        n_jobs=-1,
-        target_sfreq=250.0 # Force 250 Hz
-    )
-else:
-    print("No Right Hand files found.")
-
-# --- EYES CLOSED (Central) ---
-print("\n>>> Processing Eyes Closed (Central)...")
-df_closed = lx.scan_eeg_paths(CLEAN_DIR, pattern="*_c_eeg_mkit_cleaned.fif")
-
-if not df_closed.empty:
-    lx.assemble_tensor(
-        data_index=df_closed,
-        fs_dir=FS_DIR,
-        output_dir=OUTPUT_DIR,
-        task_name="eyes_closed", # Saves as study_eyes_closed.npz
-        project_base=PROJECT_BASE,
-        n_jobs=-1,
-        target_sfreq=250.0 # Force 250 Hz
-    )
-else:
-    print("No Central/Eyes Closed files found.")
-
-print("\n✅ All tensors saved to ./ml_data/")
+# --- Method 3: Multiple conditions ---
+for condition, pattern in [("rest", "*_rest_cleaned.fif"), 
+                            ("task", "*_task_cleaned.fif")]:
+    df = lx.scan_eeg_paths(CLEAN_DIR, pattern=pattern)
+    if not df.empty:
+        lx.assemble_tensor(df, FS_DIR, OUTPUT_DIR, 
+                          task_name=condition, project_base=PROJECT_BASE)
 '''
