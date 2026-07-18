@@ -124,14 +124,6 @@ def plot_coregistration(
             color=fid_colors[name], point_size=0.012, name=name,
         )
 
-    # Coordinate axes (RAS)
-    origin = np.array([[0., 0., 0.]], dtype=np.float32)
-    plot += k3d.line(np.vstack([origin, np.array([[0.05, 0., 0.]])]),
-                     color=0xff0000, width=0.003, name='X (R→L)')
-    plot += k3d.line(np.vstack([origin, np.array([[0., 0.05, 0.]])]),
-                     color=0x00ff00, width=0.003, name='Y (P→A)')
-    plot += k3d.line(np.vstack([origin, np.array([[0., 0., 0.05]])]),
-                     color=0x0000ff, width=0.003, name='Z (I→S)')
 
     plot.camera = [0.0, -0.2, 0.1, 0.0, 0.0, 0.05, 0.0, 0.0, 1.0]
 
@@ -139,5 +131,5 @@ def plot_coregistration(
         with open(save_to, 'w') as f:
             f.write(plot.get_snapshot())
 
-    plot.display()
+
     return plot
