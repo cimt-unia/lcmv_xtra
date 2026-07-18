@@ -1,5 +1,5 @@
 # lcmv_xtra/coreg.py
-"""Coregistration check — interactive 3D visualization using k3d."""
+"""Coregistration check — interactive 3D visualization using k3d (browser-rendered, no server GPU)."""
 import json
 import numpy as np
 import k3d
@@ -20,9 +20,6 @@ def plot_coregistration(
 ):
     """Interactive 3D coregistration quality check.
 
-    Renders the fsaverage head mesh with electrodes and fiducials in the browser.
-    No server-side GPU required — uses k3d (WebGL in Jupyter/HTML).
-
     Parameters
     ----------
     fif_path : str or Path
@@ -34,9 +31,9 @@ def plot_coregistration(
     pipeline_metadata_file : str or Path
         Path to pipeline_metadata.json.
     add_brain : bool
-        If True, overlay the pial brain surface inside the transparent head.
+        If True, overlay the pial brain surface.
     lh_pial_file, rh_pial_file : str or Path, optional
-        Paths to lh.pial and rh.pial surfaces. Required if add_brain=True.
+        Paths to lh.pial and rh.pial. Required if add_brain=True.
     save_to : str or Path, optional
         If provided, save an HTML snapshot.
 
@@ -87,10 +84,12 @@ def plot_coregistration(
         height=600,
     )
 
+    # Head mesh
     head_verts = np.asarray(head_surf['rr'], dtype=np.float32)
     head_faces = np.asarray(head_surf['tris'], dtype=np.uint32)
     plot += k3d.mesh(head_verts, head_faces, color=0xd4c5b9, opacity=0.35, name='Head')
 
+    # Optional brain
     if add_brain:
         if lh_pial_file is None or rh_pial_file is None:
             raise ValueError("lh_pial_file and rh_pial_file required when add_brain=True")
@@ -105,16 +104,27 @@ def plot_coregistration(
                 plot += k3d.mesh(verts, faces, color=color, opacity=0.7,
                                  name=f'{hemi.upper()} Hemisphere')
 
+    # Electrodes
     plot += k3d.points(
         electrodes_mri, color=0xe63946, point_size=0.005,
         name=f'Electrodes ({len(electrode_coords)})',
     )
 
+    # Fiducials
     for name, coord in fid_mri.items():
         plot += k3d.points(
             np.array([coord], dtype=np.float32),
             color=fid_colors[name], point_size=0.012, name=name,
         )
+
+    # Coordinate axes (RAS)
+    origin = np.array([[0., 0., 0.]], dtype=np.float32)
+    plot += k3d.line(np.vstack([origin, np.array([[0.05, 0., 0.]])]),
+                     color=0xff0000, width=0.003, name='X (R→L)')
+    plot += k3d.line(np.vstack([origin, np.array([[0., 0.05, 0.]])]),
+                     color=0x00ff00, width=0.003, name='Y (P→A)')
+    plot += k3d.line(np.vstack([origin, np.array([[0., 0., 0.05]])]),
+                     color=0x0000ff, width=0.003, name='Z (I→S)')
 
     plot.camera = [0.0, -0.2, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
 
@@ -122,4 +132,5 @@ def plot_coregistration(
         with open(save_to, 'w') as f:
             f.write(plot.get_snapshot())
 
+    plot.display()
     return plot
