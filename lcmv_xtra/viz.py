@@ -16,7 +16,7 @@ def plot_mni_orthoview(
     figsize: Tuple[int, int] = (18, 7),
     marker_size: int = 10,
     cmap: str = 'Purples_r',
-    show: bool = True
+    show: bool = False
 ) -> plt.Figure:
     import lcmv_xtra
 
@@ -119,6 +119,8 @@ def plot_cimt_rois(
     """
     import lcmv_xtra
     import pandas as pd
+    from matplotlib.patches import Patch
+    from matplotlib.colors import to_hex
 
     if isinstance(indices, int):
         indices = [indices]
@@ -181,22 +183,25 @@ def plot_cimt_rois(
         output_file=save_to,
     )
 
-    # Add ROI name labels for multi-ROI plots
+    # Color-matched legend for multi-ROI plots
     if len(indices) > 1:
-        names = []
-        for idx in indices:
+        cmap_obj = plt.colormaps[cmap]
+        legend_patches = []
+        for i, idx in enumerate(indices):
             row = roi_df.iloc[idx]
-            if label_type == "full":
-                names.append(f"{row['hemisphere']} {row['region_full_name']}")
-            else:
-                names.append(str(row[label_type]))
-        label_text = "\n".join(names)
-        plt.gcf().text(
-            0.82, 0.5, label_text,
-            transform=plt.gcf().transFigure,
-            fontsize=9, verticalalignment='center',
-            fontfamily='monospace',
+            color = to_hex(cmap_obj(i / max(len(indices) - 1, 1)))
+            legend_patches.append(Patch(color=color, label=row['roi_name']))
+
+        plt.gcf().legend(
+            handles=legend_patches,
+            loc='center left',
+            bbox_to_anchor=(0.82, 0.5),
+            frameon=True,
+            fontsize=8,
+            title="ROIs",
+            title_fontsize=9,
         )
+        plt.gcf().subplots_adjust(right=0.78)
 
     if show and save_to is None:
         plotting.show()
