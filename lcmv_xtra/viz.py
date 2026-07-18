@@ -82,8 +82,7 @@ def plot_mni_orthoview(
 
     if show:
         plt.show()
-    else:
-        plt.close(fig)
+    plt.close(fig)
     return fig
 
 def plot_cimt_rois(
