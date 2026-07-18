@@ -84,7 +84,6 @@ def plot_mni_orthoview(
         plt.show()
     plt.close(fig)
     return fig
-
 def plot_cimt_rois(
     indices: Union[int, List[int]],
     title: Optional[str] = None,
@@ -194,8 +193,8 @@ def plot_cimt_rois(
 
         plt.gcf().legend(
             handles=legend_patches,
-            loc='center left',
-            bbox_to_anchor=(0.82, 0.5),
+            loc='upper left',
+            bbox_to_anchor=(0.82, 0.9),
             frameon=True,
             fontsize=8,
             title="ROIs",
