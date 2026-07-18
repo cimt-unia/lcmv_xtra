@@ -1,9 +1,11 @@
 # lcmv_xtra/viz.py
 
+import logging
 import numpy as np
 import matplotlib.pyplot as plt
 import nibabel as nib
 from pathlib import Path
+from scipy import signal
 from typing import Optional, Tuple, Union, List
 from nilearn import plotting, image
 
@@ -217,3 +219,171 @@ def plot_cimt_rois(
 
     if show and save_to is None:
         plotting.show()
+
+
+def plot_group_psd_comparison(
+    condition_one_path: str,
+    condition_two_path: str,
+    label_one: str = "Condition 1",
+    label_two: str = "Condition 2",
+    roi_indices: Optional[List[int]] = None,
+    roi_names: Optional[List[str]] = None,
+    sfreq: Optional[float] = None,
+    freq_max: float = 50.0,
+    window_sec: float = 4.0,
+    overlap: float = 0.75,
+    ref_band: Tuple[float, float] = (1.0, 4.0),
+    color_one: str = '#1F77B4',
+    color_two: str = '#D62728',
+    title_prefix: str = "",
+    show: bool = True,
+    save_to: Optional[str] = None,
+) -> List[plt.Figure]:
+    """Plot PSD comparison between two conditions from study tensors.
+
+    Parameters
+    ----------
+    condition_one_path, condition_two_path : str or Path
+        Paths to .npz files from assemble_tensor() or assemble_custom_tensor().
+        Each must contain 'data' (subjects, ROIs, time) and 'sfreq'.
+    label_one, label_two : str
+        Display names for the two conditions.
+    roi_indices : list of int, optional
+        Which ROI indices to plot. If None, plots all ROIs.
+    roi_names : list of str, optional
+        Names for each ROI index. If None, uses generic names.
+        For CIMT tensors, this can be loaded from the bundled CSV.
+    sfreq : float, optional
+        Sampling frequency. Auto-detected from .npz if None.
+    freq_max : float
+        Maximum frequency to display (Hz).
+    window_sec : float
+        Welch window length in seconds.
+    overlap : float
+        Fraction of window overlap for Welch.
+    ref_band : tuple
+        (fmin, fmax) for delta-alignment reference band.
+    color_one, color_two : str
+        Line colors for the two conditions.
+    title_prefix : str
+        Prepended to each subplot title.
+    show : bool
+        If True, display figures.
+    save_to : str or Path, optional
+        If provided, save figures with this prefix (e.g., 'psd' → 'psd_ROI_0.png').
+
+    Returns
+    -------
+    list of plt.Figure
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    cond_one = np.load(condition_one_path, allow_pickle=True)
+    cond_two = np.load(condition_two_path, allow_pickle=True)
+
+    data_one = cond_one['data']   # (subjects, ROIs, time)
+    data_two = cond_two['data']
+
+    if sfreq is None:
+        sfreq = float(cond_one.get('sfreq', 250.0))
+    sfreq = float(sfreq)
+
+    n_rois = data_one.shape[1]
+    if data_two.shape[1] != n_rois:
+        raise ValueError(
+            f"ROI count mismatch: {data_one.shape[1]} vs {data_two.shape[1]}"
+        )
+
+    # Determine which ROIs to plot
+    if roi_indices is None:
+        roi_indices = list(range(n_rois))
+    if roi_names is None:
+        # Try to get from .npz (custom tensor) or use generic
+        if 'roi_names' in cond_one:
+            all_names = list(cond_one['roi_names'])
+        else:
+            all_names = [f"ROI_{i}" for i in range(n_rois)]
+        roi_names = [all_names[i] for i in roi_indices]
+
+    # Average across subjects
+    mean_one = np.nanmean(data_one, axis=0)  # (ROIs, time)
+    mean_two = np.nanmean(data_two, axis=0)
+
+    # PSD bands for shading
+    bands = [
+        (1, 4, 'Delta', '#90B3F9'),
+        (4, 8, 'Theta', '#FFF9B2'),
+        (8, 13, 'Alpha', '#AAFCD2'),
+        (13, 20, 'Low Beta', '#97C2F9'),
+        (20, 30, 'High Beta', '#90BEF5'),
+    ]
+
+    nperseg = min(int(sfreq * window_sec), data_one.shape[2])
+    noverlap = int(nperseg * overlap)
+    eps = 1e-15
+
+    figures = []
+
+    for i, roi_idx in enumerate(roi_indices):
+        sig_one = mean_one[roi_idx]
+        sig_two = mean_two[roi_idx]
+
+        # Compute PSDs
+        freqs, psd_one_lin = signal.welch(
+            sig_one, fs=sfreq, nperseg=nperseg, noverlap=noverlap, window='hann'
+        )
+        _, psd_two_lin = signal.welch(
+            sig_two, fs=sfreq, nperseg=nperseg, noverlap=noverlap, window='hann'
+        )
+
+        # Delta alignment
+        mask_ref = (freqs >= ref_band[0]) & (freqs <= ref_band[1])
+        ref_one = psd_one_lin[mask_ref].mean()
+        ref_two = psd_two_lin[mask_ref].mean()
+        offset = 10 * np.log10((ref_one + eps) / (ref_two + eps))
+
+        psd_one_db = 10 * np.log10(psd_one_lin + eps)
+        psd_two_db = 10 * np.log10(psd_two_lin + eps) + offset
+
+        # Plot
+        fig, ax = plt.subplots(figsize=(10, 4))
+        mask_freq = freqs <= freq_max
+
+        for f_lo, f_hi, name, color in bands:
+            if f_hi <= freq_max:
+                ax.axvspan(f_lo, f_hi, facecolor=color, alpha=0.08, edgecolor='none')
+                ax.annotate(
+                    name, xy=((f_lo + f_hi) / 2, 0.97),
+                    xycoords=('data', 'axes fraction'),
+                    ha='center', va='top', fontsize=8, color='#1E3A5F',
+                    fontweight='bold', alpha=0.8,
+                )
+
+        ax.plot(freqs[mask_freq], psd_one_db[mask_freq], color=color_one, lw=2, label=label_one)
+        ax.plot(freqs[mask_freq], psd_two_db[mask_freq], color=color_two, lw=2, label=label_two)
+
+        ax.set_xlim(1, freq_max)
+        ax.set_xlabel('Frequency (Hz)')
+        ax.set_ylabel('PSD (dB)')
+        title = f"{title_prefix + ' — ' if title_prefix else ''}{roi_names[i]}"
+        ax.set_title(title, fontsize=12, color='#1E3A5F', fontweight='bold')
+        ax.legend(loc='upper right', fontsize=9)
+        ax.grid(True, alpha=0.25, ls='--')
+        fig.tight_layout()
+
+        if save_to:
+            save_path = Path(save_to)
+            fig.savefig(
+                save_path.parent / f"{save_path.stem}_ROI_{roi_idx}.png",
+                dpi=150, bbox_inches='tight'
+            )
+
+        figures.append(fig)
+
+        if show:
+            plt.show()
+        else:
+            plt.close(fig)
+
+    return figures
