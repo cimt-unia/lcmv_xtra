@@ -1,5 +1,5 @@
 # lcmv_xtra/coreg.py
-"""Coregistration check — interactive 3D visualization using k3d (browser-rendered, no server GPU)."""
+"""Coregistration check — interactive 3D visualization using k3d."""
 
 import warnings
 warnings.filterwarnings('ignore', category=RuntimeWarning)
@@ -27,7 +27,6 @@ def plot_coregistration(
     head_opacity: float = 0.35,
     electrode_color: int = 0xe63946,
     electrode_size: float = 0.005,
-    save_to: Optional[str] = None,
 ):
     """Interactive 3D coregistration quality check.
 
@@ -44,7 +43,7 @@ def plot_coregistration(
     add_brain : bool
         If True, overlay the pial brain surface.
     lh_pial_file, rh_pial_file : str or Path, optional
-        Paths to lh.pial and rh.pial. Required if add_brain=True.
+        Paths to lh.pial and rh.pial. Required to show brain overlay.
     lock_rotation : bool
         If True, lock Z-axis as up and prevent camera tilting (orbit mode).
     show_grid : bool
@@ -57,8 +56,6 @@ def plot_coregistration(
         Hex color for electrodes.
     electrode_size : float
         Point size for electrodes.
-    save_to : str or Path, optional
-        If provided, save an HTML snapshot.
 
     Returns
     -------
@@ -122,17 +119,21 @@ def plot_coregistration(
     # Optional brain
     if add_brain:
         if lh_pial_file is None or rh_pial_file is None:
-            raise ValueError("lh_pial_file and rh_pial_file required when add_brain=True")
-        for hemi, color, surf_path in [
-            ('lh', 0x888888, Path(lh_pial_file)),
-            ('rh', 0x999999, Path(rh_pial_file)),
-        ]:
-            if surf_path.exists():
-                verts, faces = mne.read_surface(str(surf_path))
-                verts = np.asarray(verts, dtype=np.float32) * 0.001
-                faces = np.asarray(faces, dtype=np.uint32)
-                plot += k3d.mesh(verts, faces, color=color, opacity=0.7,
-                                 name=f'{hemi.upper()} Hemisphere')
+            warnings.warn(
+                "add_brain=True but lh_pial_file/rh_pial_file not provided. "
+                "Skipping brain overlay."
+            )
+        else:
+            for hemi, color, surf_path in [
+                ('lh', 0x888888, Path(lh_pial_file)),
+                ('rh', 0x999999, Path(rh_pial_file)),
+            ]:
+                if surf_path.exists():
+                    verts, faces = mne.read_surface(str(surf_path))
+                    verts = np.asarray(verts, dtype=np.float32) * 0.001
+                    faces = np.asarray(faces, dtype=np.uint32)
+                    plot += k3d.mesh(verts, faces, color=color, opacity=0.7,
+                                     name=f'{hemi.upper()} Hemisphere')
 
     # Electrodes
     plot += k3d.points(
@@ -158,9 +159,5 @@ def plot_coregistration(
                          color=0x0000ff, width=0.003, name='')
 
     plot.camera = [0.0, -0.2, 0.1, 0.0, 0.0, 0.05, 0.0, 0.0, 1.0]
-
-    if save_to:
-        with open(save_to, 'w') as f:
-            f.write(plot.get_snapshot())
 
     return plot
