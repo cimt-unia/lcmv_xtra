@@ -37,7 +37,7 @@ from .viz import (
     plot_group_psd_comparison,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.1.0"
 
 __all__ = [
     # Core Pipeline
