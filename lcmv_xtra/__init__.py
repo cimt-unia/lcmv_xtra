@@ -16,7 +16,6 @@ from .tensor import (
     assemble_tensor       
 )
 
-
 # Tensor / ML Aggregation (Custom - MNI coordinate based)
 from .custom_tensor import (
     assemble_custom_tensor,
@@ -39,7 +38,9 @@ from .viz import (
     plot_group_psd_comparison,
 )
 
-__version__ = "0.1.0"
+from .coreg import plot_coregistration
+
+__version__ = "0.2.0"
 
 __all__ = [
     # Core Pipeline
@@ -74,4 +75,5 @@ __all__ = [
     "plot_mni_orthoview",
     "plot_cimt_rois",
     "plot_group_psd_comparison",
+    "plot_coregistration",
 ]
