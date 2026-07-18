@@ -84,11 +84,12 @@ def plot_mni_orthoview(
         plt.show()
     plt.close(fig)
     return fig
+
 def plot_cimt_rois(
     indices: Union[int, List[int]],
     title: Optional[str] = None,
     label_type: str = "roi_name",
-    cmap: str = 'coolwarm',
+    cmap: str = 'Set1',
     alpha: float = 0.7,
     show: bool = True,
     save_to: Optional[str] = None,
@@ -108,7 +109,7 @@ def plot_cimt_rois(
         'region_full_name' (e.g., 'Primary Motor Cortex (Area 4)'),
         or 'full' for 'hemisphere region_full_name'.
     cmap : str
-        Matplotlib colormap for ROIs.
+        Matplotlib colormap for ROIs. Default 'Set1' for distinct qualitative colors.
     alpha : float
         Opacity of the ROI overlay (0-1).
     show : bool
@@ -194,16 +195,17 @@ def plot_cimt_rois(
         plt.gcf().legend(
             handles=legend_patches,
             loc='upper left',
-            bbox_to_anchor=(0.82, 0.9),
+            bbox_to_anchor=(1.02, 0.9),
             frameon=True,
             fontsize=8,
             title="ROIs",
             title_fontsize=9,
         )
-        plt.gcf().subplots_adjust(right=0.78)
+        plt.gcf().subplots_adjust(right=0.72)
 
     if show and save_to is None:
         plotting.show()
+
 
 def plot_group_psd_comparison(
     condition_one_path: str,
