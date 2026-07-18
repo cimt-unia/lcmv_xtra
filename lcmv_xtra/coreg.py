@@ -87,13 +87,14 @@ def plot_coregistration(
     electrodes_homog = np.column_stack([electrode_coords, np.ones(len(electrode_coords))])
     electrodes_mri = (head_to_mri @ electrodes_homog.T).T[:, :3].astype(np.float32)
 
-    # Fiducials — try standard names, fall back to position-based lookup
-    fid_labels = {'FidNz': 'Nasion', 'FidT9': 'LPA', 'FidT10': 'RPA'}
+    # Fiducials — from montage positions (nasion/lpa/rpa stored directly)
+    pos = montage.get_positions()
+    fid_labels = {'nasion': 'Nasion', 'lpa': 'LPA', 'rpa': 'RPA'}
     fid_colors = {'Nasion': 0x00ff00, 'LPA': 0x0000ff, 'RPA': 0xff0000}
     fid_mri = {}
     for key, name in fid_labels.items():
-        if key in ch_pos:
-            coord = np.array([ch_pos[key]], dtype=np.float32)
+        if key in pos and pos[key] is not None:
+            coord = np.array([pos[key]], dtype=np.float32)
             coord_homog = np.column_stack([coord, np.ones(1)])
             fid_mri[name] = (head_to_mri @ coord_homog.T).T[:, :3].astype(np.float32)[0]
 
