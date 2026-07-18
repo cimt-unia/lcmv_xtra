@@ -35,7 +35,7 @@ def plot_coregistration(
     lh_pial_file, rh_pial_file : str or Path, optional
         Paths to lh.pial and rh.pial. Required if add_brain=True.
     save_to : str or Path, optional
-        If provided, save a standalone HTML file.
+        If provided, save an HTML snapshot.
 
     Returns
     -------
@@ -128,10 +128,8 @@ def plot_coregistration(
 
     plot.camera = [0.0, -0.2, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
 
-    # Save standalone HTML
     if save_to:
         with open(save_to, 'w') as f:
             f.write(plot.get_snapshot())
 
-    plot.display()
     return plot
