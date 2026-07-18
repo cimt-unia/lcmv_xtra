@@ -1,85 +1,55 @@
 # lcmv_xtra/viz.py
 
-import json
 import numpy as np
 import matplotlib.pyplot as plt
 import nibabel as nib
-import mne
-import scipy.signal as signal
 from pathlib import Path
-from typing import Tuple, Optional
-from scipy.integrate import trapezoid
-from nilearn import image
-
-
-# Global configuration
-SFREQ = 500.0  # Fallback default only
-PSD_WINDOW_SEC = 2.0
-
-# Standard neurophysiological frequency bands (Hz)
-FREQ_BANDS = {
-    'Delta': (1, 4),
-    'Theta': (4, 8),
-    'Alpha': (8, 12),
-    'Low_Beta': (12, 20),
-    'High_Beta': (20, 30),
-    'Low_Gamma': (30, 50),
-    'High_Gamma': (50, 100)
-}
-
-
-def _detect_sfreq(stc_path: str) -> float:
-    """
-    Auto-detect sampling frequency from source estimate or metadata.
-    Mirrors the logic in build_subject_npz.py's get_true_sfreq().
-    
-    Detection order:
-    1. STC time vector (most reliable, direct from data)
-    2. pipeline_metadata.json (from LCMV processing)
-    3. Global default (last resort)
-    """
-    # Method 1: Check STC time vector
-    try:
-        stc = mne.read_source_estimate(stc_path)
-        if stc.times is not None and len(stc.times) > 1:
-            dt = stc.times[1] - stc.times[0]
-            if dt > 0:
-                sfreq = 1.0 / dt
-                print(f"📡 Detected sfreq from STC: {sfreq:.1f} Hz")
-                return sfreq
-    except Exception:
-        pass
-    
-    # Method 2: Check metadata file
-    stc_dir = Path(stc_path).parent
-    json_path = stc_dir / "pipeline_metadata.json"
-    if json_path.exists():
-        try:
-            with open(json_path, 'r') as f:
-                metadata = json.load(f)
-            sfreq = metadata.get('sfreq_hz')
-            if sfreq is not None:
-                print(f"📡 Detected sfreq from metadata: {sfreq:.1f} Hz")
-                return float(sfreq)
-        except Exception:
-            pass
-    
-    # Method 3: Fallback default
-    print(f"⚠️  Could not auto-detect sfreq. Using default: {SFREQ} Hz")
-    return SFREQ
+from typing import Optional, Tuple, Union, List
+from nilearn import plotting, image
 
 
 def plot_mni_orthoview(
     coordinates: list,
     region_names: Optional[list] = None,
     colors: Optional[list] = None,
-    base_dir: str = "/mnt/movement/users/jaizor/xtra/derivatives/lcmv",
+    fs_dir: str = None,
     figsize: Tuple[int, int] = (18, 7),
     marker_size: int = 10,
     cmap: str = 'Purples_r',
     show: bool = True
 ) -> plt.Figure:
-    """Plot coordinates on fsaverage T1 MRI (sagittal + coronal views)."""
+    """Plot MNI coordinates on fsaverage T1 MRI slices.
+
+    Parameters
+    ----------
+    coordinates : list of [x, y, z] or list of lists
+        MNI coordinates in millimeters.
+    region_names : list of str, optional
+        Labels for each coordinate. Defaults to Region_1, Region_2, ...
+    colors : list, optional
+        Colors for each marker. Defaults to colormap.
+    fs_dir : str or Path, optional
+        Path to fsaverage directory containing mri/T1.mgz.
+        Defaults to the bundled fsaverage in the package.
+    figsize : tuple
+        Figure size (width, height).
+    marker_size : int
+        Size of the coordinate markers.
+    cmap : str
+        Matplotlib colormap for auto-generated colors.
+    show : bool
+        If True, display the figure immediately.
+
+    Returns
+    -------
+    plt.Figure
+    """
+    import lcmv_xtra
+
+    if fs_dir is None:
+        fs_dir = Path(lcmv_xtra.__file__).parent.parent / 'data' / 'fsaverage'
+
+    fs_dir = Path(fs_dir)
     coords_array = np.atleast_2d(coordinates).astype(float)
     n_coords = coords_array.shape[0]
 
@@ -87,49 +57,60 @@ def plot_mni_orthoview(
         region_names = [f"Region_{i+1}" for i in range(n_coords)]
     if colors is None:
         cmap_func = plt.colormaps[cmap]
-        colors = [cmap_func(i % cmap_func.N) for i in range(n_coords)]
+        colors = [cmap_func(i / max(n_coords - 1, 1)) for i in range(n_coords)]
 
-    t1_path = Path(base_dir) / "fsaverage/mri/T1.mgz"
+    t1_path = fs_dir / "mri" / "T1.mgz"
     if not t1_path.exists():
         raise FileNotFoundError(f"T1.mgz not found at {t1_path}")
 
     img = nib.load(str(t1_path))
     img = nib.as_closest_canonical(img)
     data = img.get_fdata()
-    inv_affine = np.linalg.inv(img.affine)
+    affine = img.affine
+    inv_affine = np.linalg.inv(affine)
 
     homog = np.column_stack([coords_array, np.ones(n_coords)])
     voxel_coords = (inv_affine @ homog.T).T[:, :3].round().astype(int)
     cx, cy, _ = voxel_coords.mean(axis=0).astype(int)
 
-    fig, axes = plt.subplots(1, 2, figsize=figsize, dpi=120, 
-                             gridspec_kw={'width_ratios': [1, 1.2]})
+    fig, axes = plt.subplots(
+        1, 2, figsize=figsize, dpi=120,
+        gridspec_kw={'width_ratios': [1, 1.2]}
+    )
 
     if n_coords > 1:
         legend_items = [
-            plt.Line2D([0], [0], marker='o', color='w', label=name,
-                       markerfacecolor=color, markersize=10, markeredgewidth=2.5)
+            plt.Line2D(
+                [0], [0], marker='o', color='w', label=name,
+                markerfacecolor=color, markersize=10, markeredgewidth=2.5
+            )
             for name, color in zip(region_names, colors)
         ]
-        fig.legend(handles=legend_items, loc='center right', 
-                   bbox_to_anchor=(1.0, 0.5), frameon=True, 
-                   framealpha=0.9, fontsize=11, borderaxespad=0.5)
+        fig.legend(
+            handles=legend_items, loc='center right',
+            bbox_to_anchor=(1.0, 0.5), frameon=True,
+            framealpha=0.9, fontsize=11, borderaxespad=0.5
+        )
 
     views = [
-        (cx, data[cx, :, :], "Sagittal", "Y (P ← → A)", "Z (I ← → S)", 
+        (cx, data[cx, :, :], "Sagittal", "Y (P ← → A)", "Z (I ← → S)",
          lambda v: (v[1], v[2])),
-        (cy, data[:, cy, :], "Coronal", "X (L ← → R)", "Z (I ← → S)", 
-         lambda v: (v[0], v[2]))
+        (cy, data[:, cy, :], "Coronal", "X (L ← → R)", "Z (I ← → S)",
+         lambda v: (v[0], v[2])),
     ]
 
     for ax_idx, (center, slice_data, view_name, xlabel, ylabel, coord_func) in enumerate(views):
         ax = axes[ax_idx]
         if 0 <= center < slice_data.shape[0]:
             ax.imshow(slice_data.T, cmap="gray", origin="lower")
-            ax.set_title(f"{view_name} | Slice = {center}", fontsize=12, fontweight='bold')
+            ax.set_title(
+                f"{view_name} | Slice = {center}", fontsize=12, fontweight='bold'
+            )
         else:
-            ax.text(0.5, 0.5, "Out of Range", ha="center", color="red", 
-                    transform=ax.transAxes)
+            ax.text(
+                0.5, 0.5, "Out of Range", ha="center", color="red",
+                transform=ax.transAxes
+            )
 
         ax.set_xlabel(xlabel, fontsize=10)
         ax.set_ylabel(ylabel, fontsize=10)
@@ -138,220 +119,101 @@ def plot_mni_orthoview(
 
         for voxel, color in zip(voxel_coords, colors):
             plot_x, plot_y = coord_func(voxel)
-            ax.plot(plot_x, plot_y, 'o', color=color, ms=marker_size, 
-                    mfc='none', mew=2.5)
+            ax.plot(
+                plot_x, plot_y, 'o', color=color, ms=marker_size,
+                mfc='none', mew=2.5
+            )
             ax.axvline(plot_x, color=color, ls='--', alpha=0.5, lw=1)
             ax.axhline(plot_y, color=color, ls='--', alpha=0.5, lw=1)
 
-    title = (f"Coordinate: {region_names[0]}" if n_coords == 1 
-             else f"Brain Locations: {n_coords} Region(s)")
+    title = (
+        f"Coordinate: {region_names[0]}"
+        if n_coords == 1
+        else f"Brain Locations: {n_coords} Region(s)"
+    )
     fig.suptitle(title, fontsize=14, fontweight='bold', y=0.97)
-    fig.subplots_adjust(right=0.85 if n_coords > 1 else 0.95, 
-                        wspace=0.35, top=0.95, left=0.08)
+    fig.subplots_adjust(
+        right=0.85 if n_coords > 1 else 0.95,
+        wspace=0.35, top=0.95, left=0.08
+    )
 
     if show:
         plt.show()
     return fig
 
 
-def _compute_band_powers(freqs: np.ndarray, psd: np.ndarray) -> dict:
-    """Compute integrated power in standard neurophysiological bands."""
-    band_powers = {}
-    df = freqs[1] - freqs[0]
-    for band, (fmin, fmax) in FREQ_BANDS.items():
-        mask = (freqs >= fmin) & (freqs <= fmax)
-        if np.any(mask):
-            band_powers[band] = trapezoid(psd[mask], dx=df)
-        else:
-            band_powers[band] = 0.0
-    return band_powers
+def plot_cimt_rois(
+    indices: Union[int, List[int]],
+    title: Optional[str] = None,
+    cmap: str = 'coolwarm',
+    alpha: float = 0.7,
+    show: bool = True,
+    save_to: Optional[str] = None,
+) -> None:
+    """Plot CIMT atlas ROIs on MNI template using ortho view.
 
-
-def compute_psd(
-    time_series: np.ndarray,
-    sfreq: float = SFREQ,
-    method: str = 'welch',
-    fmin: float = 1.0,
-    fmax: float = 100.0,
-    window_sec: float = PSD_WINDOW_SEC
-) -> Tuple[np.ndarray, np.ndarray, dict]:
-    """Compute PSD using Welch or Multitaper method."""
-    ts = np.real(time_series).astype(np.float64)
-    window_size = int(window_sec * sfreq)
-    if len(ts) < window_size:
-        raise ValueError("Time series too short for PSD estimation.")
-
-    # High-pass filter (0.5 Hz)
-    nyq = sfreq * 0.5
-    b, a = signal.butter(4, 0.5 / nyq, btype='high')
-    filtered = signal.filtfilt(b, a, ts)
-
-    if method == 'welch':
-        freqs, psd = signal.welch(
-            filtered, fs=sfreq, window='hann', nperseg=window_size,
-            noverlap=window_size // 2, detrend='constant'
-        )
-        mask = (freqs >= fmin) & (freqs <= fmax)
-        freqs, psd = freqs[mask], psd[mask]
-
-    elif method == 'multitaper':
-        try:
-            from mne.time_frequency import psd_array_multitaper
-            psd, freqs = psd_array_multitaper(
-                x=filtered, sfreq=sfreq, fmin=fmin, fmax=fmax,
-                bandwidth=2.0, adaptive=False, normalization='length',
-                low_bias=True, verbose=False
-            )
-        except Exception as e:
-            print(f"Multitaper failed ({e}), falling back to Welch.")
-            return compute_psd(time_series, sfreq, 'welch', fmin, fmax, window_sec)
-    else:
-        raise ValueError("method must be 'welch' or 'multitaper'")
-
-    band_powers = _compute_band_powers(freqs, psd)
-    return freqs.astype(np.float32), psd.astype(np.float32), band_powers
-
-
-def visualize_source_at_coordinate(
-    stc_path: str,
-    mni_coord: list,
-    roi_name: str = "Custom ROI",
-    base_dir: str = "/mnt/movement/users/jaizor/xtra/derivatives/_fs",
-    sfreq: Optional[float] = None,
-    psd_method: str = 'welch',
-    psd_color: str = "#4A3387",
-    band_cmap: str = "Blues"
-):
-    """
-    Visualize PSD and brain location for a given MNI coordinate.
-    
-    Use this BEFORE batch processing to verify that your MNI coordinates
-    target the correct brain regions.
-    
     Parameters
     ----------
-    stc_path : str
-        Path to source estimate file (.h5 or .stc)
-    mni_coord : list
-        Target MNI coordinate [x, y, z] in mm
-    roi_name : str
-        Label for the region
-    base_dir : str
-        Directory containing fsaverage/ and source space files
-    sfreq : float or None
-        Sampling frequency (Hz). If None, auto-detected from STC file or metadata.
-    psd_method : str
-        'welch' or 'multitaper'
-    psd_color : str
-        Color for the main PSD line
-    band_cmap : str
-        Colormap for frequency band shading
+    indices : int or list of int
+        CIMT ROI indices (0-447). Maps to NIfTI labels 1-448.
+        For multiple ROIs, each gets a different color from the colormap.
+    title : str, optional
+        Plot title. Auto-generated if None.
+    cmap : str
+        Matplotlib colormap for ROIs.
+    alpha : float
+        Opacity of the ROI overlay (0-1).
+    show : bool
+        If True, display the figure immediately.
+    save_to : str or Path, optional
+        If provided, save the figure to this path.
     """
-    # =========================================================================
-    # FIX 1: Auto-detect or use provided sfreq
-    # =========================================================================
-    if sfreq is None:
-        sfreq = _detect_sfreq(stc_path)
-    
-    # Load STC and source space
-    stc = mne.read_source_estimate(stc_path)
-    src_file = Path(base_dir) / "fsaverage-vol-5mm-src.fif"
-    src = mne.read_source_spaces(str(src_file))
+    import lcmv_xtra
 
-    # =========================================================================
-    # FIX 2: Proper MNI coordinate transformation (matching atlas_extraction.py)
-    # =========================================================================
-    active_vertices = stc.vertices[0]
-    src_rr = src[0]['rr'][active_vertices] * 1000  # m → mm
-    
-    try:
-        trans = src[0]['mri_ras_t']['trans']
-    except KeyError:
-        raise ValueError("Source space missing 'mri_ras_t' transform.")
-    
-    mni_coords = image.coord_transform(
-        src_rr[:, 0], src_rr[:, 1], src_rr[:, 2], trans
+    if isinstance(indices, int):
+        indices = [indices]
+
+    atlas_path = (
+        Path(lcmv_xtra.__file__).parent
+        / 'data' / 'cimt_atlas' / 'CIMT_448ROIs_atlas.nii.gz'
     )
-    active_coords_mm = np.array(mni_coords).T
+    if not atlas_path.exists():
+        raise FileNotFoundError(f"CIMT atlas not found at {atlas_path}")
 
-    if stc.data.shape[0] != len(active_coords_mm):
-        raise RuntimeError("Active source count mismatch")
+    atlas_img = nib.load(atlas_path)
+    atlas_data = atlas_img.get_fdata().astype(np.int32)
 
-    # Find closest active source
-    target = np.array(mni_coord)
-    distances = np.linalg.norm(active_coords_mm - target, axis=1)
-    best_idx_in_active = np.argmin(distances)
-    actual_coord = active_coords_mm[best_idx_in_active]
+    # Build mask with sequential values for colormap
+    mask = np.zeros(atlas_data.shape, dtype=np.int32)
+    for i, idx in enumerate(indices):
+        mask[atlas_data == idx + 1] = i + 1
 
-    print(f"Requested MNI: {mni_coord}")
-    print(f"Closest active source: [{actual_coord[0]:.1f}, "
-          f"{actual_coord[1]:.1f}, {actual_coord[2]:.1f}] "
-          f"(dist: {distances[best_idx_in_active]:.1f} mm)")
-    print(f"Sampling frequency: {sfreq:.1f} Hz")
-    print(f"Duration: {len(stc.times) / sfreq:.1f} seconds")
+    mask_img = image.new_img_like(atlas_img, mask)
 
-    # Plot orthoview
-    plot_mni_orthoview(
-        coordinates=[mni_coord], 
-        region_names=[roi_name], 
-        base_dir=base_dir
+    # Center view on the midpoint of all selected ROIs
+    all_voxels = np.argwhere(mask > 0)
+    if len(all_voxels) == 0:
+        raise ValueError("None of the requested labels found in the atlas.")
+    com = nib.affines.apply_affine(atlas_img.affine, all_voxels.mean(axis=0))
+    cut_coords = tuple(com.round().astype(int))
+
+    if title is None:
+        n = len(indices)
+        title = f"CIMT: {n} ROI{'s' if n > 1 else ''}"
+
+    plotting.plot_roi(
+        mask_img,
+        title=title,
+        cut_coords=cut_coords,
+        display_mode='ortho',
+        cmap=cmap,
+        alpha=alpha,
+        dim=-0.5,
+        black_bg=False,
+        draw_cross=True,
+        radiological=False,
+        output_file=save_to,
     )
 
-    # Extract time series and compute PSD
-    ts = stc.data[best_idx_in_active, :]
-    freqs, psd, band_powers = compute_psd(
-        ts, sfreq=sfreq, method=psd_method, fmin=1.0, fmax=100.0
-    )
-
-    # Plot PSD
-    fig, ax = plt.subplots(figsize=(12, 5))
-    ax.plot(freqs, psd, color=psd_color, linewidth=2.2)
-
-    # Band shading
-    cmap = plt.colormaps.get_cmap(band_cmap)
-    n_bands = len(FREQ_BANDS)
-    
-    for i, (band, (fmin, fmax)) in enumerate(FREQ_BANDS.items()):
-        if fmax < freqs[0] or fmin > freqs[-1]:
-            continue
-        color_intensity = 0.3 + (i / max(n_bands - 1, 1)) * 0.4
-        band_color = cmap(color_intensity)
-        band_low = max(fmin, freqs[0])
-        band_high = min(fmax, freqs[-1])
-        ax.axvspan(band_low, band_high, color=band_color, alpha=0.10, zorder=0)
-
-    # Band boundaries
-    all_boundaries = set()
-    for fmin, fmax in FREQ_BANDS.values():
-        if freqs[0] <= fmin <= freqs[-1]:
-            all_boundaries.add(fmin)
-        if freqs[0] <= fmax <= freqs[-1]:
-            all_boundaries.add(fmax)
-    
-    for boundary in sorted(all_boundaries):
-        ax.axvline(boundary, color='gray', linestyle=':', alpha=0.4, 
-                   linewidth=0.6, zorder=1)
-
-    # Band labels
-    for band, (low, high) in FREQ_BANDS.items():
-        if high < freqs[0] or low > freqs[-1]:
-            continue
-        center_x = (max(low, freqs[0]) + min(high, freqs[-1])) / 2
-        ax.text(center_x, 1.02, band.replace('_', ' '), 
-                transform=ax.get_xaxis_transform(),
-                ha='center', va='bottom', fontsize=8, 
-                color='dimgray', alpha=0.85, fontweight='regular')
-
-    # Formatting
-    y_label = f"PSD (log₁₀) - {psd_method.capitalize()} ({sfreq:.0f} Hz)"
-    ax.set_xlabel("Frequency (Hz)", fontsize=11)
-    ax.set_ylabel(y_label, fontsize=11)
-    ax.set_yscale('log')
-    ax.set_xlim(1, 100)
-    ax.grid(True, which='both', alpha=0.2, linestyle='-', linewidth=0.5)
-    ax.tick_params(axis='both', which='major', labelsize=10)
-
-    fig.suptitle(f"{roi_name} — Power Spectral Density", 
-                 fontsize=14, fontweight='bold', y=0.98)
-
-    plt.show()
+    if show and save_to is None:
+        plotting.show()
