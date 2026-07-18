@@ -18,29 +18,6 @@ def plot_mni_orthoview(
     cmap: str = 'Purples_r',
     show: bool = True
 ) -> plt.Figure:
-    """Plot MNI coordinates on fsaverage T1 MRI slices.
-
-    Parameters
-    ----------
-    coordinates : list of [x, y, z] or list of lists
-        MNI coordinates in millimeters.
-    region_names : list of str, optional
-        Labels for each coordinate.
-    colors : list, optional
-        Colors for each marker.
-    figsize : tuple
-        Figure size (width, height).
-    marker_size : int
-        Size of the coordinate markers.
-    cmap : str
-        Matplotlib colormap for auto-generated colors.
-    show : bool
-        If True, display the figure immediately.
-
-    Returns
-    -------
-    plt.Figure
-    """
     import lcmv_xtra
 
     t1_path = Path(lcmv_xtra.__file__).parent / 'data' / 'fsavg' / 'T1.mgz'
@@ -103,19 +80,16 @@ def plot_mni_orthoview(
             ax.axvline(plot_x, color=color, ls='--', alpha=0.5, lw=1)
             ax.axhline(plot_y, color=color, ls='--', alpha=0.5, lw=1)
 
-    title = (f"Coordinate: {region_names[0]}" if n_coords == 1
-             else f"Brain Locations: {n_coords} Region(s)")
-    fig.suptitle(title, fontsize=14, fontweight='bold', y=0.97)
-    fig.subplots_adjust(right=0.85 if n_coords > 1 else 0.95,
-                        wspace=0.35, top=0.95, left=0.08)
-
     if show:
         plt.show()
+    else:
+        plt.close(fig)
     return fig
 
 def plot_cimt_rois(
     indices: Union[int, List[int]],
     title: Optional[str] = None,
+    label_type: str = "roi_name",
     cmap: str = 'coolwarm',
     alpha: float = 0.7,
     show: bool = True,
@@ -126,20 +100,25 @@ def plot_cimt_rois(
     Parameters
     ----------
     indices : int or list of int
-        CIMT ROI indices (0-447). Maps to NIfTI labels 1-448.
-        For multiple ROIs, each gets a different color from the colormap.
+        CIMT ROI indices (0-447).
     title : str, optional
-        Plot title. Auto-generated if None.
+        Plot title. Auto-generated from label_type if None.
+    label_type : str
+        Column from cimt_atlas_labels.csv for the title:
+        'roi_name' (e.g., 'L_4_ROI'),
+        'region_full_name' (e.g., 'Primary Motor Cortex (Area 4)'),
+        or 'full' for 'hemisphere region_full_name'.
     cmap : str
-        Matplotlib colormap for ROIs.
+        Matplotlib colormap.
     alpha : float
-        Opacity of the ROI overlay (0-1).
+        Opacity of the ROI overlay.
     show : bool
-        If True, display the figure immediately.
+        If True, display the figure.
     save_to : str or Path, optional
-        If provided, save the figure to this path.
+        If provided, save the figure.
     """
     import lcmv_xtra
+    import pandas as pd
 
     if isinstance(indices, int):
         indices = [indices]
@@ -148,20 +127,24 @@ def plot_cimt_rois(
         Path(lcmv_xtra.__file__).parent
         / 'data' / 'cimt_atlas' / 'CIMT_448ROIs_atlas.nii.gz'
     )
+    labels_path = (
+        Path(lcmv_xtra.__file__).parent
+        / 'data' / 'cimt_atlas' / 'cimt_atlas_labels.csv'
+    )
+
     if not atlas_path.exists():
         raise FileNotFoundError(f"CIMT atlas not found at {atlas_path}")
 
     atlas_img = nib.load(atlas_path)
     atlas_data = atlas_img.get_fdata().astype(np.int32)
+    roi_df = pd.read_csv(labels_path)
 
-    # Build mask with sequential values for colormap
     mask = np.zeros(atlas_data.shape, dtype=np.int32)
     for i, idx in enumerate(indices):
         mask[atlas_data == idx + 1] = i + 1
 
     mask_img = image.new_img_like(atlas_img, mask)
 
-    # Center view on the midpoint of all selected ROIs
     all_voxels = np.argwhere(mask > 0)
     if len(all_voxels) == 0:
         raise ValueError("None of the requested labels found in the atlas.")
@@ -169,26 +152,24 @@ def plot_cimt_rois(
     cut_coords = tuple(com.round().astype(int))
 
     if title is None:
-        n = len(indices)
-        title = f"CIMT: {n} ROI{'s' if n > 1 else ''}"
+        if len(indices) == 1:
+            row = roi_df.iloc[indices[0]]
+            if label_type == "full":
+                title = f"{row['hemisphere']} {row['region_full_name']}"
+            else:
+                title = str(row[label_type])
+        else:
+            title = f"CIMT: {len(indices)} ROIs"
 
     plotting.plot_roi(
-        mask_img,
-        title=title,
-        cut_coords=cut_coords,
-        display_mode='ortho',
-        cmap=cmap,
-        alpha=alpha,
-        dim=-0.5,
-        black_bg=False,
-        draw_cross=True,
-        radiological=False,
-        output_file=save_to,
+        mask_img, title=title, cut_coords=cut_coords,
+        display_mode='ortho', cmap=cmap, alpha=alpha,
+        dim=-0.5, black_bg=False, draw_cross=True,
+        radiological=False, output_file=save_to,
     )
 
     if show and save_to is None:
         plotting.show()
-
 
 def plot_group_psd_comparison(
     condition_one_path: str,
