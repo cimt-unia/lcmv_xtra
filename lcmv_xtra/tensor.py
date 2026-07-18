@@ -12,6 +12,24 @@ from .source_estimation import execute_source_estimation
 
 logger = logging.getLogger(__name__)
 
+def make_subject_list(paths: list[str], ids: list[str] = None) -> pd.DataFrame:
+    """Create a subject DataFrame from a list of file paths.
+    
+    Parameters
+    ----------
+    paths : list of str
+        Paths to .fif files.
+    ids : list of str, optional
+        Subject IDs. Defaults to sub-00, sub-01, ...
+    
+    Returns
+    -------
+    pd.DataFrame with columns 'subject_id' and 'fif_path'.
+    """
+    if ids is None:
+        ids = [f"sub-{i:02d}" for i in range(len(paths))]
+    return pd.DataFrame({'subject_id': ids, 'fif_path': paths})
+
 def _process_single_subject(args):
     """Helper for parallel processing."""
     sid, fif_path, task_name, project_base, fs_dir, verbose = args
