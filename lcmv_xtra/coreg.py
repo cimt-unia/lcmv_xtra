@@ -16,7 +16,6 @@ def plot_coregistration(
     add_brain: bool = False,
     lh_pial_file: Optional[str] = None,
     rh_pial_file: Optional[str] = None,
-    show: bool = True,
     save_to: Optional[str] = None,
 ):
     """Interactive 3D coregistration quality check.
@@ -38,8 +37,6 @@ def plot_coregistration(
         If True, overlay the pial brain surface inside the transparent head.
     lh_pial_file, rh_pial_file : str or Path, optional
         Paths to lh.pial and rh.pial surfaces. Required if add_brain=True.
-    show : bool
-        If True, display the plot in the notebook.
     save_to : str or Path, optional
         If provided, save an HTML snapshot.
 
@@ -121,26 +118,8 @@ def plot_coregistration(
 
     plot.camera = [0.0, -0.2, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
 
-    if show:
-        plot.display()
-
     if save_to:
         with open(save_to, 'w') as f:
             f.write(plot.get_snapshot())
 
     return plot
-
-
-'''
-from lcmv_xtra import plot_coregistration
-
-plot_coregistration(
-    fif_path="/data/sub-08_cleaned.fif",
-    trans_file="/lcmv/sub-08/fsaverage-trans.fif",
-    head_surf_file="/fsaverage/bem/fsaverage-head-dense.fif",
-    pipeline_metadata_file="/lcmv/sub-08/pipeline_metadata.json",
-    add_brain=True,
-    lh_pial_file="/fsaverage/surf/lh.pial",
-    rh_pial_file="/fsaverage/surf/rh.pial",
-)
-'''
