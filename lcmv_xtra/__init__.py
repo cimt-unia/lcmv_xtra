@@ -10,10 +10,12 @@ from .cimt_atlas import cimt_extraction
 
 # Tensor / ML Aggregation (Standard - Atlas based)
 from .tensor import (
+    make_subject_list,
     scan_eeg_paths,      
     save_study_tensor,
     assemble_tensor       
 )
+
 
 # Tensor / ML Aggregation (Custom - MNI coordinate based)
 from .custom_tensor import (
@@ -49,7 +51,8 @@ __all__ = [
     "difumo_extraction",
     "cimt_extraction",  
     
-    # Tensor / ML Aggregation (Standard)
+    # Tensor / ML Aggregation (CIMT Atlas Standard)
+    "make_subject_list",
     "scan_eeg_paths",      
     "save_study_tensor",
     "assemble_tensor",     
