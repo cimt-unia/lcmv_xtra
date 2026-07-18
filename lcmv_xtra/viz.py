@@ -89,7 +89,7 @@ def plot_cimt_rois(
     indices: Union[int, List[int]],
     title: Optional[str] = None,
     label_type: str = "roi_name",
-    cmap: str = 'Set1',
+    cmap: str = 'plasma',
     alpha: float = 0.7,
     show: bool = True,
     save_to: Optional[str] = None,
