@@ -9,12 +9,10 @@ from scipy import signal
 from typing import Optional, Tuple, Union, List
 from nilearn import plotting, image
 
-
 def plot_mni_orthoview(
     coordinates: list,
     region_names: Optional[list] = None,
     colors: Optional[list] = None,
-    fs_dir: str = None,
     figsize: Tuple[int, int] = (18, 7),
     marker_size: int = 10,
     cmap: str = 'Purples_r',
@@ -27,12 +25,9 @@ def plot_mni_orthoview(
     coordinates : list of [x, y, z] or list of lists
         MNI coordinates in millimeters.
     region_names : list of str, optional
-        Labels for each coordinate. Defaults to Region_1, Region_2, ...
+        Labels for each coordinate.
     colors : list, optional
-        Colors for each marker. Defaults to colormap.
-    fs_dir : str or Path, optional
-        Path to fsaverage directory containing mri/T1.mgz.
-        Defaults to the bundled fsaverage in the package.
+        Colors for each marker.
     figsize : tuple
         Figure size (width, height).
     marker_size : int
@@ -48,10 +43,8 @@ def plot_mni_orthoview(
     """
     import lcmv_xtra
 
-    if fs_dir is None:
-        fs_dir = Path(lcmv_xtra.__file__).parent.parent / 'data' / 'fsaverage'
+    t1_path = Path(lcmv_xtra.__file__).parent / 'data' / 'fsavg' / 'T1.mgz'
 
-    fs_dir = Path(fs_dir)
     coords_array = np.atleast_2d(coordinates).astype(float)
     n_coords = coords_array.shape[0]
 
@@ -61,38 +54,27 @@ def plot_mni_orthoview(
         cmap_func = plt.colormaps[cmap]
         colors = [cmap_func(i / max(n_coords - 1, 1)) for i in range(n_coords)]
 
-    t1_path = fs_dir / "mri" / "T1.mgz"
-    if not t1_path.exists():
-        raise FileNotFoundError(f"T1.mgz not found at {t1_path}")
-
     img = nib.load(str(t1_path))
     img = nib.as_closest_canonical(img)
     data = img.get_fdata()
-    affine = img.affine
-    inv_affine = np.linalg.inv(affine)
+    inv_affine = np.linalg.inv(img.affine)
 
     homog = np.column_stack([coords_array, np.ones(n_coords)])
     voxel_coords = (inv_affine @ homog.T).T[:, :3].round().astype(int)
     cx, cy, _ = voxel_coords.mean(axis=0).astype(int)
 
-    fig, axes = plt.subplots(
-        1, 2, figsize=figsize, dpi=120,
-        gridspec_kw={'width_ratios': [1, 1.2]}
-    )
+    fig, axes = plt.subplots(1, 2, figsize=figsize, dpi=120,
+                             gridspec_kw={'width_ratios': [1, 1.2]})
 
     if n_coords > 1:
         legend_items = [
-            plt.Line2D(
-                [0], [0], marker='o', color='w', label=name,
-                markerfacecolor=color, markersize=10, markeredgewidth=2.5
-            )
+            plt.Line2D([0], [0], marker='o', color='w', label=name,
+                       markerfacecolor=color, markersize=10, markeredgewidth=2.5)
             for name, color in zip(region_names, colors)
         ]
-        fig.legend(
-            handles=legend_items, loc='center right',
-            bbox_to_anchor=(1.0, 0.5), frameon=True,
-            framealpha=0.9, fontsize=11, borderaxespad=0.5
-        )
+        fig.legend(handles=legend_items, loc='center right',
+                   bbox_to_anchor=(1.0, 0.5), frameon=True,
+                   framealpha=0.9, fontsize=11, borderaxespad=0.5)
 
     views = [
         (cx, data[cx, :, :], "Sagittal", "Y (P ← → A)", "Z (I ← → S)",
@@ -105,15 +87,10 @@ def plot_mni_orthoview(
         ax = axes[ax_idx]
         if 0 <= center < slice_data.shape[0]:
             ax.imshow(slice_data.T, cmap="gray", origin="lower")
-            ax.set_title(
-                f"{view_name} | Slice = {center}", fontsize=12, fontweight='bold'
-            )
+            ax.set_title(f"{view_name} | Slice = {center}", fontsize=12, fontweight='bold')
         else:
-            ax.text(
-                0.5, 0.5, "Out of Range", ha="center", color="red",
-                transform=ax.transAxes
-            )
-
+            ax.text(0.5, 0.5, "Out of Range", ha="center", color="red",
+                    transform=ax.transAxes)
         ax.set_xlabel(xlabel, fontsize=10)
         ax.set_ylabel(ylabel, fontsize=10)
         ax.set_xticks([])
@@ -121,28 +98,20 @@ def plot_mni_orthoview(
 
         for voxel, color in zip(voxel_coords, colors):
             plot_x, plot_y = coord_func(voxel)
-            ax.plot(
-                plot_x, plot_y, 'o', color=color, ms=marker_size,
-                mfc='none', mew=2.5
-            )
+            ax.plot(plot_x, plot_y, 'o', color=color, ms=marker_size,
+                    mfc='none', mew=2.5)
             ax.axvline(plot_x, color=color, ls='--', alpha=0.5, lw=1)
             ax.axhline(plot_y, color=color, ls='--', alpha=0.5, lw=1)
 
-    title = (
-        f"Coordinate: {region_names[0]}"
-        if n_coords == 1
-        else f"Brain Locations: {n_coords} Region(s)"
-    )
+    title = (f"Coordinate: {region_names[0]}" if n_coords == 1
+             else f"Brain Locations: {n_coords} Region(s)")
     fig.suptitle(title, fontsize=14, fontweight='bold', y=0.97)
-    fig.subplots_adjust(
-        right=0.85 if n_coords > 1 else 0.95,
-        wspace=0.35, top=0.95, left=0.08
-    )
+    fig.subplots_adjust(right=0.85 if n_coords > 1 else 0.95,
+                        wspace=0.35, top=0.95, left=0.08)
 
     if show:
         plt.show()
     return fig
-
 
 def plot_cimt_rois(
     indices: Union[int, List[int]],
