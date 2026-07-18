@@ -16,6 +16,7 @@ def plot_coregistration(
     add_brain: bool = False,
     lh_pial_file: Optional[str] = None,
     rh_pial_file: Optional[str] = None,
+    lock_rotation: bool = False,
     save_to: Optional[str] = None,
 ):
     """Interactive 3D coregistration quality check.
@@ -34,6 +35,8 @@ def plot_coregistration(
         If True, overlay the pial brain surface.
     lh_pial_file, rh_pial_file : str or Path, optional
         Paths to lh.pial and rh.pial. Required if add_brain=True.
+    lock_rotation : bool
+        If True, lock Z-axis as up and prevent camera tilting (orbit mode).
     save_to : str or Path, optional
         If provided, save an HTML snapshot.
 
@@ -79,12 +82,14 @@ def plot_coregistration(
             fid_mri[name] = (head_to_mri @ coord_homog.T).T[:, :3].astype(np.float32)[0]
 
     # k3d plot
-
-    plot = k3d.plot(
+    plot_kwargs = dict(
         name=f"Coregistration — {subject_id} ({coreg_error:.2f} mm)",
         height=600,
-        up='z',
     )
+    if lock_rotation:
+        plot_kwargs['camera_mode'] = 'orbit'
+
+    plot = k3d.plot(**plot_kwargs)
 
     # Head mesh
     head_verts = np.asarray(head_surf['rr'], dtype=np.float32)
@@ -128,7 +133,7 @@ def plot_coregistration(
     plot += k3d.line(np.vstack([origin, np.array([[0., 0., 0.05]])]),
                      color=0x0000ff, width=0.003, name='Z (I→S)')
 
-    plot.camera = [0.0, -0.2, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+    plot.camera = [0.0, -0.2, 0.1, 0.0, 0.0, 0.05, 0.0, 0.0, 1.0]
 
     if save_to:
         with open(save_to, 'w') as f:
