@@ -139,4 +139,5 @@ def plot_coregistration(
         with open(save_to, 'w') as f:
             f.write(plot.get_snapshot())
 
+    plot.display()
     return plot
