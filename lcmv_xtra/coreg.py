@@ -1,5 +1,10 @@
 # lcmv_xtra/coreg.py
 """Coregistration check — interactive 3D visualization using k3d (browser-rendered, no server GPU)."""
+
+import warnings
+warnings.filterwarnings('ignore', category=RuntimeWarning)
+warnings.filterwarnings('ignore', message='.*float64.*float32.*')
+
 import json
 import numpy as np
 import k3d
