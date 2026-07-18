@@ -6,7 +6,7 @@ import pandas as pd
 
 FS_DIR = Path("/derivatives/_fs")
 OUTPUT_DIR = Path("/eeg_tensor")
-PROJECT_BASE = Path("xtra")
+PROJECT_BASE = Path("path")
 CLEAN_DIR = Path("/eeg_clean")
 
 DBS_ROIS = {
@@ -27,7 +27,7 @@ for condition in ["gain", "loss"]:
         fs_dir=FS_DIR,
         output_dir=OUTPUT_DIR,
         roi_coordinates=DBS_ROIS,
-        task_name=condition,  # Just "gain" or "loss"
+        task_name=condition,  
         project_base=PROJECT_BASE,
         mode="single",
         n_jobs=1,
