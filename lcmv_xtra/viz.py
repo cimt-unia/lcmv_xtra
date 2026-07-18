@@ -99,22 +99,23 @@ def plot_cimt_rois(
     Parameters
     ----------
     indices : int or list of int
-        CIMT ROI indices (0-447).
+        CIMT ROI indices (0-447). Maps to NIfTI labels 1-448.
     title : str, optional
         Plot title. Auto-generated from label_type if None.
+        Use '' for no title.
     label_type : str
-        Column from cimt_atlas_labels.csv for the title:
+        Column from cimt_atlas_labels.csv for auto-title:
         'roi_name' (e.g., 'L_4_ROI'),
         'region_full_name' (e.g., 'Primary Motor Cortex (Area 4)'),
         or 'full' for 'hemisphere region_full_name'.
     cmap : str
-        Matplotlib colormap.
+        Matplotlib colormap for ROIs.
     alpha : float
-        Opacity of the ROI overlay.
+        Opacity of the ROI overlay (0-1).
     show : bool
-        If True, display the figure.
+        If True, display the figure immediately.
     save_to : str or Path, optional
-        If provided, save the figure.
+        If provided, save the figure to this path.
     """
     import lcmv_xtra
     import pandas as pd
@@ -138,18 +139,21 @@ def plot_cimt_rois(
     atlas_data = atlas_img.get_fdata().astype(np.int32)
     roi_df = pd.read_csv(labels_path)
 
+    # Build mask with sequential values for colormap
     mask = np.zeros(atlas_data.shape, dtype=np.int32)
     for i, idx in enumerate(indices):
         mask[atlas_data == idx + 1] = i + 1
 
     mask_img = image.new_img_like(atlas_img, mask)
 
+    # Center view on the midpoint of all selected ROIs
     all_voxels = np.argwhere(mask > 0)
     if len(all_voxels) == 0:
         raise ValueError("None of the requested labels found in the atlas.")
     com = nib.affines.apply_affine(atlas_img.affine, all_voxels.mean(axis=0))
     cut_coords = tuple(com.round().astype(int))
 
+    # Build title
     if title is None:
         if len(indices) == 1:
             row = roi_df.iloc[indices[0]]
@@ -159,13 +163,40 @@ def plot_cimt_rois(
                 title = str(row[label_type])
         else:
             title = f"CIMT: {len(indices)} ROIs"
+    elif title == "":
+        title = None
 
     plotting.plot_roi(
-        mask_img, title=title, cut_coords=cut_coords,
-        display_mode='ortho', cmap=cmap, alpha=alpha,
-        dim=-0.5, black_bg=False, draw_cross=True,
-        radiological=False, output_file=save_to,
+        mask_img,
+        title=title,
+        cut_coords=cut_coords,
+        display_mode='ortho',
+        cmap=cmap,
+        alpha=alpha,
+        dim=-0.5,
+        black_bg=False,
+        draw_cross=True,
+        radiological=False,
+        colorbar=False,
+        output_file=save_to,
     )
+
+    # Add ROI name labels for multi-ROI plots
+    if len(indices) > 1:
+        names = []
+        for idx in indices:
+            row = roi_df.iloc[idx]
+            if label_type == "full":
+                names.append(f"{row['hemisphere']} {row['region_full_name']}")
+            else:
+                names.append(str(row[label_type]))
+        label_text = "\n".join(names)
+        plt.gcf().text(
+            0.82, 0.5, label_text,
+            transform=plt.gcf().transFigure,
+            fontsize=9, verticalalignment='center',
+            fontfamily='monospace',
+        )
 
     if show and save_to is None:
         plotting.show()
