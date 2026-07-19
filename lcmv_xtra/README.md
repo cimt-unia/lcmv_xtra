@@ -2,7 +2,10 @@
 
 The source estimation stage transforms cleaned sensor-level EEG data into anatomically localized brain activity using a Linearly Constrained Minimum Variance (LCMV) beamformer. Implemented via the `lcmv_xtra` package, this pipeline executes five sequential computational stages specifically optimized to maximize spatial fidelity for deep subcortical and limbic structures.
 
+<br>
+
 ## Framework
+
 <br>
 
 ### 1. Sensor Space Preparation and Coordinate Normalization
