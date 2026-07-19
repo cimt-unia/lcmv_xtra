@@ -1,10 +1,11 @@
-## Source Estimation Framework
+# Source Reconstruction
 
 The source estimation stage transforms cleaned sensor-level EEG data into anatomically localized brain activity using a Linearly Constrained Minimum Variance (LCMV) beamformer. Implemented via the `lcmv_xtra` package, this pipeline executes five sequential computational stages specifically optimized to maximize spatial fidelity for deep subcortical and limbic structures.
 
+## Framework
 <br>
 
-#### 1. Sensor Space Preparation and Coordinate Normalization
+### 1. Sensor Space Preparation and Coordinate Normalization
 Before source modeling, raw EEG data must be established in a standardized geometric frame. The pipeline loads ICA-cleaned FIF files and applies a custom BEL 280-channel montage derived from a bundled GPSC digitization file.
 
 -   **Channel Renaming:** Raw EGI channel labels are mapped to standard MNE-compatible names (E1–E280). This translation is mandatory because forward solution routines require standardized nomenclature to correctly associate sensor positions with lead field columns; without it, topographic alignment fails silently.
@@ -15,7 +16,7 @@ Before source modeling, raw EEG data must be established in a standardized geome
 
 <br>
 
-#### 2. Coregistration with Outlier-Robust ICP
+### 2. Coregistration with Outlier-Robust ICP
 Coregistration aligns the EEG sensor array to the fsaverage MRI template. This is the most critical step for subcortical signal fidelity, as even small misalignments can displace deep sources by centimeters.
 
 -   **Fiducial-Based Initialization:** Alignment begins by rigidly matching the three EEG fiducials to their MRI counterparts. This provides a coarse initial transform; without it, Iterative Closest Point (ICP) optimization could converge to a local minimum with grossly incorrect alignment.
@@ -27,7 +28,7 @@ Coregistration aligns the EEG sensor array to the fsaverage MRI template. This i
 
 <br>
 
-#### 3. Volumetric Forward Solution Computation
+### 3. Volumetric Forward Solution Computation
 The forward model predicts what each EEG sensor would record given a unit current dipole at every location in the brain. Unlike surface-constrained approaches, this pipeline uses a **volumetric source space** to explicitly capture deep generators.
 
 -   **Source Space:** A 5 mm isotropic grid (`fsaverage-vol-5mm-src.fif`) spans the entire brain volume, including basal ganglia, thalamus, brainstem, and cerebellum. This ensures subcortical structures are modeled as independent dipoles rather than being erroneously projected onto the nearest cortical surface.
@@ -36,7 +37,7 @@ The forward model predicts what each EEG sensor would record given a unit curren
 
 <br>
 
-#### 4. LCMV Beamformer Filter Construction
+### 4. LCMV Beamformer Filter Construction
 Spatial filters are computed to pass activity from each target voxel while suppressing interference from all other locations. Several design choices specifically address challenges of post-ICA EEG data and deep source recovery.
 
 -   **Condition-Specific Covariance Estimation:** Data covariance is computed **separately for each experimental condition** using the Oracle Approximating Shrinkage (OAS) estimator with `rank=None`. This separation is theoretically critical because LCMV beamformers suffer from severe **signal cancellation** when sources are correlated: estimated source power decreases as a quadratic function of correlation ($\hat{\sigma}^2 = 1 - \rho^2$), and perfect synchrony yields zero output [1][2]. Mixing conditions introduces artificial cross-state correlations that the beamformer misinterprets as interference, causing catastrophic suppression of true neural signals—particularly for deep limbic structures whose weak signals are most vulnerable to cancellation [1]. Condition-specific estimation ensures the covariance matrix reflects only the intrinsic functional connectivity of each state, preserving signal integrity for valid cross-condition comparison [3][4]. OAS provides optimal regularization for this high-dimensional setting, and empirical rank estimation (`rank=None`) correctly handles reduced effective dimensionality from ICA component rejection [5][6].
@@ -47,7 +48,7 @@ Spatial filters are computed to pass activity from each target voxel while suppr
 
 <br>
 
-#### 5. Source Time Course Extraction and Atlas Projection
+### 5. Source Time Course Extraction and Atlas Projection
 The final stage applies spatial filters to continuous EEG data and extracts region-specific time courses.
 
 -   **Filter Application:** LCMV filters are applied to raw (continuous, non-epoched) EEG data, producing a source estimate matrix of shape `(n_sources × n_timepoints)` at 500 Hz. Operating on continuous data preserves full temporal dynamics needed for spectral analysis and avoids edge artifacts from epoch-based filtering.
@@ -56,7 +57,7 @@ The final stage applies spatial filters to continuous EEG data and extracts regi
 
 <br>
 
-### References
+## References
 
 1.  Kuznetsova, A., Nurislamova, Y., & Ossadtchi, A. (2021). Modified covariance beamformer for solving MEG inverse problem in the environment with correlated sources. *NeuroImage*, 228, 117677. [https://doi.org/10.1016/j.neuroimage.2020.117677](https://doi.org/10.1016/j.neuroimage.2020.117677) — Analytically proves quadratic signal cancellation in LCMV with correlated sources; validates condition-specific covariance to prevent cross-state interference.
 2.  Sekihara, K., & Nagarajan, S. S. (2008). *Adaptive Spatial Filters for Electromagnetic Brain Imaging*. Springer. [https://doi.org/10.1007/978-3-540-79370-0](https://doi.org/10.1007/978-3-540-79370-0) — Comprehensive treatment of signal cancellation in correlated environments and LCMV constraints.
