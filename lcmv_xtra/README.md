@@ -54,7 +54,7 @@ Spatial filters are computed to pass activity from each target voxel while suppr
 ### 5. Source Time Course Extraction and Atlas Projection
 The final stage applies spatial filters to continuous EEG data and extracts region-specific time courses.
 
--   **Filter Application:** LCMV filters are applied to raw (continuous, non-epoched) EEG data, producing a source estimate matrix of shape `(n_sources × n_timepoints)` at 500 Hz. Operating on continuous data preserves full temporal dynamics needed for spectral analysis and avoids edge artifacts from epoch-based filtering.
+-   **Filter Application:** LCMV filters are applied to raw (continuous, non-epoched) EEG data, producing a source estimate matrix of shape `(n_sources × n_timepoints)` at 250/500 Hz. Operating on continuous data preserves full temporal dynamics needed for spectral analysis and avoids edge artifacts from epoch-based filtering.
 -   **Atlas Extraction:** Source-space activations are extracted for all 448 ROIs in the CIMT Unified Atlas. Each ROI's time course is computed as the mean activation across all voxels falling within that region's volumetric mask, producing condition-specific tensors ready for spectral analysis.
 -   **Metadata Preservation:** A JSON metadata file records all processing parameters (sampling rate, regularization value, coregistration error, source count, file paths). This enables exact reproducibility and allows downstream scripts to validate that source estimates were generated with consistent settings across subjects and conditions.
 
