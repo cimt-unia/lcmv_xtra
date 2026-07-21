@@ -1,0 +1,415 @@
+index,roi_name,hemisphere,region_full_name,functional_system,sub_system
+0,L_V1_ROI,Left,Primary Visual Cortex (V1),Visual,EarlyRetinotopic
+1,L_MST_ROI,Left,Medial Superior Temporal Area (MST),Visual,Dorsal
+2,L_V6_ROI,Left,Visual Area 6 (V6),Visual,Dorsal
+3,L_V2_ROI,Left,Secondary Visual Cortex (V2),Visual,EarlyRetinotopic
+4,L_V3_ROI,Left,Visual Area 3 (V3),Visual,EarlyRetinotopic
+5,L_V4_ROI,Left,Visual Area 4 (V4),Visual,Ventral
+6,L_V8_ROI,Left,Visual Area 8 (V8),Visual,Ventral
+7,L_4_ROI,Left,Primary Motor Cortex (Area 4),Motor,Primary
+8,L_3b_ROI,Left,Primary Somatosensory Cortex (Area 3b),Somatosensory,Primary
+9,L_FEF_ROI,Left,Frontal Eye Field,DorsalAttention,Frontal
+10,L_PEF_ROI,Left,Parietal Eye Field,DorsalAttention,Parietal
+11,L_55b_ROI,Left,Premotor Area 55b,Motor,Premotor
+12,L_V3A_ROI,Left,Visual Area 3A (V3A),Visual,Dorsal
+13,L_RSC_ROI,Left,Retrosplenial Complex,DefaultMode,Retrosplenial
+14,L_POS2_ROI,Left,Parieto-Occipital Sulcus Area 2,Visual,Dorsal
+15,L_V7_ROI,Left,Visual Area 7 (V7),Visual,Dorsal
+16,L_IPS1_ROI,Left,Intraparietal Sulcus Area 1,DorsalAttention,Parietal
+17,L_FFC_ROI,Left,Fusiform Face Complex,Visual,Ventral
+18,L_V3B_ROI,Left,Visual Area 3B (V3B),Visual,Dorsal
+19,L_LO1_ROI,Left,Lateral Occipital Area 1 (LO1),Visual,Lateral
+20,L_LO2_ROI,Left,Lateral Occipital Area 2 (LO2),Visual,Lateral
+21,L_PIT_ROI,Left,Posterior Inferotemporal Complex,Visual,Ventral
+22,L_MT_ROI,Left,Middle Temporal Area (V5/MT),Visual,Dorsal
+23,L_A1_ROI,Left,Primary Auditory Cortex,Auditory,Core
+24,L_PSL_ROI,Left,Perisylvian Language Area,Language,Perisylvian
+25,L_SFL_ROI,Left,Superior Frontal Language Area,Frontoparietal,Language
+26,L_PCV_ROI,Left,Precuneus Visual Area,DefaultMode,Precuneus
+27,L_STV_ROI,Left,Superior Temporal Visual Area,VentralAttention,Temporal
+28,L_7Pm_ROI,Left,Medial Area 7P,DorsalAttention,Parietal
+29,L_Precuneus_ROI,Left,Precuneus,DefaultMode,Precuneus
+30,L_POS1_ROI,Left,Parieto-Occipital Sulcus Area 1,Visual,Dorsal
+31,L_23d_ROI,Left,Dorsal Posterior Cingulate Area 23,DefaultMode,PosteriorCingulate
+32,L_v23ab_ROI,Left,Ventral Posterior Cingulate Area 23ab,DefaultMode,PosteriorCingulate
+33,L_d23ab_ROI,Left,Dorsal Posterior Cingulate Area 23ab,DefaultMode,PosteriorCingulate
+34,L_31pv_ROI,Left,Ventral Posterior Cingulate Area 31,DefaultMode,PosteriorCingulate
+35,L_5m_ROI,Left,Medial Area 5 (Superior Parietal Lobule),Somatosensory,Association
+36,L_5mv_ROI,Left,Medioventral Area 5 (Superior Parietal Lobule),Somatosensory,Association
+37,L_23c_ROI,Left,Central Posterior Cingulate Area 23,DefaultMode,PosteriorCingulate
+38,L_5L_ROI,Left,Lateral Area 5 (Superior Parietal Lobule),Somatosensory,Association
+39,L_24dd_ROI,Left,Dorsal Anterior Cingulate Area 24d,CinguloOpercular,AnteriorCingulate
+40,L_24dv_ROI,Left,Ventral Anterior Cingulate Area 24d,CinguloOpercular,AnteriorCingulate
+41,L_7AL_ROI,Left,Anterolateral Area 7A,DorsalAttention,Parietal
+42,L_SCEF_ROI,Left,Supplementary and Cingulate Eye Field,Motor,Eye
+43,L_6ma_ROI,Left,Medial Anterior Supplementary Motor Area 6 (SMA),Motor,Supplementary
+44,L_7Am_ROI,Left,Anteromedial Area 7A,DorsalAttention,Parietal
+45,L_7PL_ROI,Left,Posterolateral Area 7P,DorsalAttention,Parietal
+46,L_7PC_ROI,Left,Superior Parietal Area 7PC,DorsalAttention,Parietal
+47,L_LIPv_ROI,Left,Ventral Lateral Intraparietal Area,DorsalAttention,Parietal
+48,L_VIP_ROI,Left,Ventral Intraparietal Area,DorsalAttention,Parietal
+49,L_MIP_ROI,Left,Medial Intraparietal Area,DorsalAttention,Parietal
+50,L_1_ROI,Left,Primary Somatosensory Cortex (Area 1),Somatosensory,Primary
+51,L_2_ROI,Left,Primary Somatosensory Cortex (Area 2),Somatosensory,Primary
+52,L_3a_ROI,Left,Primary Somatosensory Cortex (Area 3a),Somatosensory,Primary
+53,L_6d_ROI,Left,Dorsal Premotor Area 6d,Motor,Premotor
+54,L_6mp_ROI,Left,Medial Posterior Supplementary Motor Area 6 (pre-SMA),Motor,Supplementary
+55,L_6v_ROI,Left,Ventral Premotor Area 6v,Motor,Premotor
+56,L_p24pr_ROI,Left,Posterior Pregenual Cingulate Area 24,CinguloOpercular,MidCingulate
+57,L_33pr_ROI,Left,Pregenual Cingulate Area 33,CinguloOpercular,AnteriorCingulate
+58,L_a24pr_ROI,Left,Anterior Pregenual Cingulate Area 24,CinguloOpercular,AnteriorCingulate
+59,L_p32pr_ROI,Left,Posterior Pregenual Cingulate Area 32,CinguloOpercular,AnteriorCingulate
+60,L_a24_ROI,Left,Anterior Cingulate Area 24,CinguloOpercular,AnteriorCingulate
+61,L_d32_ROI,Left,Dorsal Anterior Cingulate Area 32,CinguloOpercular,AnteriorCingulate
+62,L_8BM_ROI,Left,Medial Prefrontal Area 8B,DefaultMode,Prefrontal
+63,L_p32_ROI,Left,Posterior Anterior Cingulate Area 32,CinguloOpercular,AnteriorCingulate
+64,L_10r_ROI,Left,Rostral Frontopolar Area 10,DefaultMode,Prefrontal
+65,L_47m_ROI,Left,Medial Orbitofrontal Area 47,Limbic,Orbitofrontal
+66,L_8Av_ROI,Left,Ventral Prefrontal Area 8A,DefaultMode,Prefrontal
+67,L_8Ad_ROI,Left,Dorsal Prefrontal Area 8A,DefaultMode,Prefrontal
+68,L_9m_ROI,Left,Medial Prefrontal Area 9,DefaultMode,Prefrontal
+69,L_8BL_ROI,Left,Lateral Prefrontal Area 8B,DefaultMode,Prefrontal
+70,L_9p_ROI,Left,Posterior Prefrontal Area 9,DefaultMode,Prefrontal
+71,L_10d_ROI,Left,Dorsal Frontopolar Area 10,DefaultMode,Prefrontal
+72,L_8C_ROI,Left,Prefrontal Area 8C,DefaultMode,Prefrontal
+73,L_44_ROI,Left,Inferior Frontal Pars Opercularis (Broca's Area),Language,Broca
+74,L_45_ROI,Left,Inferior Frontal Pars Triangularis (Broca's Area),Language,Broca
+75,L_47l_ROI,Left,Lateral Orbitofrontal Area 47,Limbic,Orbitofrontal
+76,L_a47r_ROI,Left,Rostral Orbitofrontal Area 47,Limbic,Orbitofrontal
+77,L_6r_ROI,Left,Rostral Premotor Area 6r,Motor,Premotor
+78,L_IFJa_ROI,Left,Anterior Inferior Frontal Junction,Frontoparietal,IFJ
+79,L_IFJp_ROI,Left,Posterior Inferior Frontal Junction,Frontoparietal,IFJ
+80,L_IFSp_ROI,Left,Posterior Inferior Frontal Sulcus,Frontoparietal,IFS
+81,L_IFSa_ROI,Left,Anterior Inferior Frontal Sulcus,Frontoparietal,IFS
+82,L_p9-46v_ROI,Left,Posterior Ventral Prefrontal Area 9-46,Frontoparietal,VLPFC
+83,L_46_ROI,Left,Dorsolateral Prefrontal Area 46,Frontoparietal,DLPFC
+84,L_a9-46v_ROI,Left,Anterior Ventral Prefrontal Area 9-46,Frontoparietal,VLPFC
+85,L_9-46d_ROI,Left,Dorsal Prefrontal Area 9-46,Frontoparietal,DLPFC
+86,L_9a_ROI,Left,Anterior Prefrontal Area 9,DefaultMode,Prefrontal
+87,L_10v_ROI,Left,Ventral Frontopolar Area 10,DefaultMode,Prefrontal
+88,L_a10p_ROI,Left,Anterior Polar Area 10,DefaultMode,Prefrontal
+89,L_10pp_ROI,Left,Polar Prefrontal Area 10,DefaultMode,Prefrontal
+90,L_11l_ROI,Left,Lateral Orbitofrontal Area 11,Limbic,Orbitofrontal
+91,L_13l_ROI,Left,Lateral Orbitofrontal Area 13,Limbic,Orbitofrontal
+92,L_OFC_ROI,Left,Orbital Frontal Complex,Limbic,Orbitofrontal
+93,L_47s_ROI,Left,Subcentral Orbitofrontal Area 47,Limbic,Orbitofrontal
+94,L_LIPd_ROI,Left,Dorsal Lateral Intraparietal Area,DorsalAttention,Parietal
+95,L_6a_ROI,Left,Anterior Premotor Area 6a,Motor,Premotor
+96,L_i6-8_ROI,Left,Inferior Transitional Area 6-8,Frontoparietal,Premotor
+97,L_s6-8_ROI,Left,Superior Transitional Area 6-8,Frontoparietal,Premotor
+98,L_43_ROI,Left,Gustatory Cortex (Area 43),Other,Other
+99,L_OP4_ROI,Left,Parietal Operculum Area 4,Somatosensory,Operculum
+100,L_OP1_ROI,Left,Parietal Operculum Area 1,Somatosensory,Operculum
+101,L_OP2-3_ROI,Left,Parietal Operculum Area 2-3,Somatosensory,Operculum
+102,L_52_ROI,Left,Parainsular Area 52,Language,Parainsular
+103,L_RI_ROI,Left,Retroinsular Cortex,Language,Retroinsular
+104,L_PFcm_ROI,Left,Centromedial Inferior Parietal Area PF,DefaultMode,Parietal
+105,L_PoI2_ROI,Left,Posterior Insular Area 2,CinguloOpercular,Insula
+106,L_TA2_ROI,Left,Auditory Association Area TA2,Auditory,Association
+107,L_FOP4_ROI,Left,Frontal Opercular Area 4,CinguloOpercular,FrontalOperculum
+108,L_MI_ROI,Left,Middle Insular Area,CinguloOpercular,Insula
+109,L_Pir_ROI,Left,Piriform Cortex,Limbic,Piriform
+110,L_AVI_ROI,Left,Anterior Ventral Insular Area,CinguloOpercular,Insula
+111,L_AAIC_ROI,Left,Anterior Agranular Insula Complex,CinguloOpercular,Insula
+112,L_FOP1_ROI,Left,Frontal Opercular Area 1,CinguloOpercular,FrontalOperculum
+113,L_FOP3_ROI,Left,Frontal Opercular Area 3,CinguloOpercular,FrontalOperculum
+114,L_FOP2_ROI,Left,Frontal Opercular Area 2,CinguloOpercular,FrontalOperculum
+115,L_PFt_ROI,Left,Transitional Inferior Parietal Area PF,DefaultMode,Parietal
+116,L_AIP_ROI,Left,Anterior Intraparietal Area,VentralAttention,Parietal
+117,L_EC_ROI,Left,Entorhinal Cortex,Limbic,MedialTemporal
+118,L_PreS_ROI,Left,Presubiculum,Limbic,MedialTemporal
+119,L_H_ROI,Left,Hippocampus (Cortical),Limbic,MedialTemporal
+120,L_ProS_ROI,Left,Prosubiculum,Limbic,MedialTemporal
+121,L_PeEc_ROI,Left,Perirhinal Ectocortex,Limbic,MedialTemporal
+122,L_STGa_ROI,Left,Anterior Superior Temporal Gyrus,VentralAttention,Temporal
+123,L_PBelt_ROI,Left,Posterior Auditory Parabelt,Auditory,Belt
+124,L_A5_ROI,Left,Auditory Association Area 5,Auditory,Association
+125,L_PHA1_ROI,Left,Parahippocampal Area 1,Limbic,Parahippocampal
+126,L_PHA3_ROI,Left,Parahippocampal Area 3,Limbic,Parahippocampal
+127,L_STSda_ROI,Left,Dorsal Anterior Superior Temporal Sulcus,VentralAttention,Temporal
+128,L_STSdp_ROI,Left,Dorsal Posterior Superior Temporal Sulcus,VentralAttention,Temporal
+129,L_STSvp_ROI,Left,Ventral Posterior Superior Temporal Sulcus,VentralAttention,Temporal
+130,L_TGd_ROI,Left,Dorsal Temporal Pole,Temporal,Association
+131,L_TE1a_ROI,Left,Anterior Inferotemporal Area TE1,Temporal,Inferotemporal
+132,L_TE1p_ROI,Left,Posterior Inferotemporal Area TE1,Temporal,Inferotemporal
+133,L_TE2a_ROI,Left,Anterior Inferotemporal Area TE2,Temporal,Inferotemporal
+134,L_TF_ROI,Left,Parahippocampal Area TF,Limbic,Parahippocampal
+135,L_TE2p_ROI,Left,Posterior Inferotemporal Area TE2,Temporal,Inferotemporal
+136,L_PHT_ROI,Left,Posterior Parahippocampal Area,Limbic,Parahippocampal
+137,L_PH_ROI,Left,Parahippocampal Area,Limbic,Parahippocampal
+138,L_TPOJ1_ROI,Left,Temporoparietal Occipital Junction 1,VentralAttention,Junction
+139,L_TPOJ2_ROI,Left,Temporoparietal Occipital Junction 2,VentralAttention,Junction
+140,L_TPOJ3_ROI,Left,Temporoparietal Occipital Junction 3,VentralAttention,Junction
+141,L_DVT_ROI,Left,Dorsal Visual Transitional Area,Visual,Dorsal
+142,L_PGp_ROI,Left,Posterior Parietal Area PG,DefaultMode,Parietal
+143,L_IP2_ROI,Left,Intraparietal Area 2,DorsalAttention,Parietal
+144,L_IP1_ROI,Left,Intraparietal Area 1,DorsalAttention,Parietal
+145,L_IP0_ROI,Left,Intraparietal Area 0,DorsalAttention,Parietal
+146,L_PFop_ROI,Left,Opercular Parietal Area PF,DefaultMode,Parietal
+147,L_PF_ROI,Left,Supramarginal Gyrus (Area PF),DefaultMode,Parietal
+148,L_PFm_ROI,Left,Medial Parietal Area PF,DefaultMode,Parietal
+149,L_PGi_ROI,Left,Inferior Angular Gyrus (Area PG),DefaultMode,Parietal
+150,L_PGs_ROI,Left,Superior Angular Gyrus (Area PG),DefaultMode,Parietal
+151,L_V6A_ROI,Left,Visual Area 6A (V6A),Visual,Dorsal
+152,L_VMV1_ROI,Left,Ventromedial Visual Area 1 (VMV1),Visual,Ventral
+153,L_VMV3_ROI,Left,Ventromedial Visual Area 3 (VMV3),Visual,Ventral
+154,L_PHA2_ROI,Left,Parahippocampal Area 2,Limbic,Parahippocampal
+155,L_V4t_ROI,Left,Transitional Visual Area 4 (V4t),Visual,Ventral
+156,L_FST_ROI,Left,Fundus of Superior Temporal Sulcus,Visual,Dorsal
+157,L_V3CD_ROI,Left,Dorsal Visual Transition Area 3 (V3CD),Visual,Dorsal
+158,L_LO3_ROI,Left,Lateral Occipital Area 3 (LO3),Visual,Lateral
+159,L_VMV2_ROI,Left,Ventromedial Visual Area 2 (VMV2),Visual,Ventral
+160,L_31pd_ROI,Left,Posterior Dorsal Cingulate Area 31,DefaultMode,PosteriorCingulate
+161,L_31a_ROI,Left,Anterior Cingulate Area 31,DefaultMode,PosteriorCingulate
+162,L_VVC_ROI,Left,Ventral Visual Complex,Visual,Ventral
+163,Sg25_R,Left,Subgenual Cingulate Area 25,Limbic,SubgenualCingulate
+164,Sgs32_R,Left,Subgenual Cingulate Area 32,Limbic,SubgenualCingulate
+165,L_pOFC_ROI,Left,Posterior Orbitofrontal Complex,Limbic,Orbitofrontal
+166,L_PoI1_ROI,Left,Posterior Insular Area 1,CinguloOpercular,Insula
+167,L_Ig_ROI,Left,Granular Insula,CinguloOpercular,Insula
+168,L_FOP5_ROI,Left,Frontal Opercular Area 5,CinguloOpercular,FrontalOperculum
+169,L_p10p_ROI,Left,Posterior Polar Area 10,DefaultMode,Prefrontal
+170,L_p47r_ROI,Left,Posterior Rostral Orbitofrontal Area 47,Limbic,Orbitofrontal
+171,L_TGv_ROI,Left,Ventral Temporal Pole,Temporal,Association
+172,L_MBelt_ROI,Left,Medial Auditory Parabelt,Auditory,Belt
+173,L_LBelt_ROI,Left,Lateral Auditory Parabelt,Auditory,Belt
+174,L_A4_ROI,Left,Auditory Association Area 4,Auditory,Association
+175,L_STSva_ROI,Left,Ventral Anterior Superior Temporal Sulcus,VentralAttention,Temporal
+176,L_TE1m_ROI,Left,Middle Inferotemporal Area TE1,Temporal,Inferotemporal
+177,L_PI_ROI,Left,Parieto-Insular Vestibular Cortex,VentralAttention,Vestibular
+178,L_a32pr_ROI,Left,Anterior Pregenual Cingulate Area 32,CinguloOpercular,AnteriorCingulate
+179,L_p24_ROI,Left,Posterior Cingulate Area 24,CinguloOpercular,MidCingulate
+180,R_V1_ROI,Right,Primary Visual Cortex (V1),Visual,EarlyRetinotopic
+181,R_MST_ROI,Right,Medial Superior Temporal Area (MST),Visual,Dorsal
+182,R_V6_ROI,Right,Visual Area 6 (V6),Visual,Dorsal
+183,R_V2_ROI,Right,Secondary Visual Cortex (V2),Visual,EarlyRetinotopic
+184,R_V3_ROI,Right,Visual Area 3 (V3),Visual,EarlyRetinotopic
+185,R_V4_ROI,Right,Visual Area 4 (V4),Visual,Ventral
+186,R_V8_ROI,Right,Visual Area 8 (V8),Visual,Ventral
+187,R_4_ROI,Right,Primary Motor Cortex (Area 4),Motor,Primary
+188,R_3b_ROI,Right,Primary Somatosensory Cortex (Area 3b),Somatosensory,Primary
+189,R_FEF_ROI,Right,Frontal Eye Field,DorsalAttention,Frontal
+190,R_PEF_ROI,Right,Parietal Eye Field,DorsalAttention,Parietal
+191,R_55b_ROI,Right,Premotor Area 55b,Motor,Premotor
+192,R_V3A_ROI,Right,Visual Area 3A (V3A),Visual,Dorsal
+193,R_RSC_ROI,Right,Retrosplenial Complex,DefaultMode,Retrosplenial
+194,R_POS2_ROI,Right,Parieto-Occipital Sulcus Area 2,Visual,Dorsal
+195,R_V7_ROI,Right,Visual Area 7 (V7),Visual,Dorsal
+196,R_IPS1_ROI,Right,Intraparietal Sulcus Area 1,DorsalAttention,Parietal
+197,R_FFC_ROI,Right,Fusiform Face Complex,Visual,Ventral
+198,R_V3B_ROI,Right,Visual Area 3B (V3B),Visual,Dorsal
+199,R_LO1_ROI,Right,Lateral Occipital Area 1 (LO1),Visual,Lateral
+200,R_LO2_ROI,Right,Lateral Occipital Area 2 (LO2),Visual,Lateral
+201,R_PIT_ROI,Right,Posterior Inferotemporal Complex,Visual,Ventral
+202,R_MT_ROI,Right,Middle Temporal Area (V5/MT),Visual,Dorsal
+203,R_A1_ROI,Right,Primary Auditory Cortex,Auditory,Core
+204,R_PSL_ROI,Right,Perisylvian Language Area,Language,Perisylvian
+205,R_SFL_ROI,Right,Superior Frontal Language Area,Frontoparietal,Language
+206,R_PCV_ROI,Right,Precuneus Visual Area,DefaultMode,Precuneus
+207,R_STV_ROI,Right,Superior Temporal Visual Area,VentralAttention,Temporal
+208,R_7Pm_ROI,Right,Medial Area 7P,DorsalAttention,Parietal
+209,R_Precuneus_ROI,Right,Precuneus,DefaultMode,Precuneus
+210,R_POS1_ROI,Right,Parieto-Occipital Sulcus Area 1,Visual,Dorsal
+211,R_23d_ROI,Right,Dorsal Posterior Cingulate Area 23,DefaultMode,PosteriorCingulate
+212,R_v23ab_ROI,Right,Ventral Posterior Cingulate Area 23ab,DefaultMode,PosteriorCingulate
+213,R_d23ab_ROI,Right,Dorsal Posterior Cingulate Area 23ab,DefaultMode,PosteriorCingulate
+214,R_31pv_ROI,Right,Ventral Posterior Cingulate Area 31,DefaultMode,PosteriorCingulate
+215,R_5m_ROI,Right,Medial Area 5 (Superior Parietal Lobule),Somatosensory,Association
+216,R_5mv_ROI,Right,Medioventral Area 5 (Superior Parietal Lobule),Somatosensory,Association
+217,R_23c_ROI,Right,Central Posterior Cingulate Area 23,DefaultMode,PosteriorCingulate
+218,R_5L_ROI,Right,Lateral Area 5 (Superior Parietal Lobule),Somatosensory,Association
+219,R_24dd_ROI,Right,Dorsal Anterior Cingulate Area 24d,CinguloOpercular,AnteriorCingulate
+220,R_24dv_ROI,Right,Ventral Anterior Cingulate Area 24d,CinguloOpercular,AnteriorCingulate
+221,R_7AL_ROI,Right,Anterolateral Area 7A,DorsalAttention,Parietal
+222,R_SCEF_ROI,Right,Supplementary and Cingulate Eye Field,Motor,Eye
+223,R_6ma_ROI,Right,Medial Anterior Supplementary Motor Area 6 (SMA),Motor,Supplementary
+224,R_7Am_ROI,Right,Anteromedial Area 7A,DorsalAttention,Parietal
+225,R_7PL_ROI,Right,Posterolateral Area 7P,DorsalAttention,Parietal
+226,R_7PC_ROI,Right,Superior Parietal Area 7PC,DorsalAttention,Parietal
+227,R_LIPv_ROI,Right,Ventral Lateral Intraparietal Area,DorsalAttention,Parietal
+228,R_VIP_ROI,Right,Ventral Intraparietal Area,DorsalAttention,Parietal
+229,R_MIP_ROI,Right,Medial Intraparietal Area,DorsalAttention,Parietal
+230,R_1_ROI,Right,Primary Somatosensory Cortex (Area 1),Somatosensory,Primary
+231,R_2_ROI,Right,Primary Somatosensory Cortex (Area 2),Somatosensory,Primary
+232,R_3a_ROI,Right,Primary Somatosensory Cortex (Area 3a),Somatosensory,Primary
+233,R_6d_ROI,Right,Dorsal Premotor Area 6d,Motor,Premotor
+234,R_6mp_ROI,Right,Medial Posterior Supplementary Motor Area 6 (pre-SMA),Motor,Supplementary
+235,R_6v_ROI,Right,Ventral Premotor Area 6v,Motor,Premotor
+236,R_p24pr_ROI,Right,Posterior Pregenual Cingulate Area 24,CinguloOpercular,MidCingulate
+237,R_33pr_ROI,Right,Pregenual Cingulate Area 33,CinguloOpercular,AnteriorCingulate
+238,R_a24pr_ROI,Right,Anterior Pregenual Cingulate Area 24,CinguloOpercular,AnteriorCingulate
+239,R_p32pr_ROI,Right,Posterior Pregenual Cingulate Area 32,CinguloOpercular,AnteriorCingulate
+240,R_a24_ROI,Right,Anterior Cingulate Area 24,CinguloOpercular,AnteriorCingulate
+241,R_d32_ROI,Right,Dorsal Anterior Cingulate Area 32,CinguloOpercular,AnteriorCingulate
+242,R_8BM_ROI,Right,Medial Prefrontal Area 8B,DefaultMode,Prefrontal
+243,R_p32_ROI,Right,Posterior Anterior Cingulate Area 32,CinguloOpercular,AnteriorCingulate
+244,R_10r_ROI,Right,Rostral Frontopolar Area 10,DefaultMode,Prefrontal
+245,R_47m_ROI,Right,Medial Orbitofrontal Area 47,Limbic,Orbitofrontal
+246,R_8Av_ROI,Right,Ventral Prefrontal Area 8A,DefaultMode,Prefrontal
+247,R_8Ad_ROI,Right,Dorsal Prefrontal Area 8A,DefaultMode,Prefrontal
+248,R_9m_ROI,Right,Medial Prefrontal Area 9,DefaultMode,Prefrontal
+249,R_8BL_ROI,Right,Lateral Prefrontal Area 8B,DefaultMode,Prefrontal
+250,R_9p_ROI,Right,Posterior Prefrontal Area 9,DefaultMode,Prefrontal
+251,R_10d_ROI,Right,Dorsal Frontopolar Area 10,DefaultMode,Prefrontal
+252,R_8C_ROI,Right,Prefrontal Area 8C,DefaultMode,Prefrontal
+253,R_44_ROI,Right,Inferior Frontal Pars Opercularis (Broca's Area),Language,Broca
+254,R_45_ROI,Right,Inferior Frontal Pars Triangularis (Broca's Area),Language,Broca
+255,R_47l_ROI,Right,Lateral Orbitofrontal Area 47,Limbic,Orbitofrontal
+256,R_a47r_ROI,Right,Rostral Orbitofrontal Area 47,Limbic,Orbitofrontal
+257,R_6r_ROI,Right,Rostral Premotor Area 6r,Motor,Premotor
+258,R_IFJa_ROI,Right,Anterior Inferior Frontal Junction,Frontoparietal,IFJ
+259,R_IFJp_ROI,Right,Posterior Inferior Frontal Junction,Frontoparietal,IFJ
+260,R_IFSp_ROI,Right,Posterior Inferior Frontal Sulcus,Frontoparietal,IFS
+261,R_IFSa_ROI,Right,Anterior Inferior Frontal Sulcus,Frontoparietal,IFS
+262,R_p9-46v_ROI,Right,Posterior Ventral Prefrontal Area 9-46,Frontoparietal,VLPFC
+263,R_46_ROI,Right,Dorsolateral Prefrontal Area 46,Frontoparietal,DLPFC
+264,R_a9-46v_ROI,Right,Anterior Ventral Prefrontal Area 9-46,Frontoparietal,VLPFC
+265,R_9-46d_ROI,Right,Dorsal Prefrontal Area 9-46,Frontoparietal,DLPFC
+266,R_9a_ROI,Right,Anterior Prefrontal Area 9,DefaultMode,Prefrontal
+267,R_10v_ROI,Right,Ventral Frontopolar Area 10,DefaultMode,Prefrontal
+268,R_a10p_ROI,Right,Anterior Polar Area 10,DefaultMode,Prefrontal
+269,R_10pp_ROI,Right,Polar Prefrontal Area 10,DefaultMode,Prefrontal
+270,R_11l_ROI,Right,Lateral Orbitofrontal Area 11,Limbic,Orbitofrontal
+271,R_13l_ROI,Right,Lateral Orbitofrontal Area 13,Limbic,Orbitofrontal
+272,R_OFC_ROI,Right,Orbital Frontal Complex,Limbic,Orbitofrontal
+273,R_47s_ROI,Right,Subcentral Orbitofrontal Area 47,Limbic,Orbitofrontal
+274,R_LIPd_ROI,Right,Dorsal Lateral Intraparietal Area,DorsalAttention,Parietal
+275,R_6a_ROI,Right,Anterior Premotor Area 6a,Motor,Premotor
+276,R_i6-8_ROI,Right,Inferior Transitional Area 6-8,Frontoparietal,Premotor
+277,R_s6-8_ROI,Right,Superior Transitional Area 6-8,Frontoparietal,Premotor
+278,R_43_ROI,Right,Gustatory Cortex (Area 43),Other,Other
+279,R_OP4_ROI,Right,Parietal Operculum Area 4,Somatosensory,Operculum
+280,R_OP1_ROI,Right,Parietal Operculum Area 1,Somatosensory,Operculum
+281,R_OP2-3_ROI,Right,Parietal Operculum Area 2-3,Somatosensory,Operculum
+282,R_52_ROI,Right,Parainsular Area 52,Language,Parainsular
+283,R_RI_ROI,Right,Retroinsular Cortex,Language,Retroinsular
+284,R_PFcm_ROI,Right,Centromedial Inferior Parietal Area PF,DefaultMode,Parietal
+285,R_PoI2_ROI,Right,Posterior Insular Area 2,CinguloOpercular,Insula
+286,R_TA2_ROI,Right,Auditory Association Area TA2,Auditory,Association
+287,R_FOP4_ROI,Right,Frontal Opercular Area 4,CinguloOpercular,FrontalOperculum
+288,R_MI_ROI,Right,Middle Insular Area,CinguloOpercular,Insula
+289,R_Pir_ROI,Right,Piriform Cortex,Limbic,Piriform
+290,R_AVI_ROI,Right,Anterior Ventral Insular Area,CinguloOpercular,Insula
+291,R_AAIC_ROI,Right,Anterior Agranular Insula Complex,CinguloOpercular,Insula
+292,R_FOP1_ROI,Right,Frontal Opercular Area 1,CinguloOpercular,FrontalOperculum
+293,R_FOP3_ROI,Right,Frontal Opercular Area 3,CinguloOpercular,FrontalOperculum
+294,R_FOP2_ROI,Right,Frontal Opercular Area 2,CinguloOpercular,FrontalOperculum
+295,R_PFt_ROI,Right,Transitional Inferior Parietal Area PF,DefaultMode,Parietal
+296,R_AIP_ROI,Right,Anterior Intraparietal Area,VentralAttention,Parietal
+297,R_EC_ROI,Right,Entorhinal Cortex,Limbic,MedialTemporal
+298,R_PreS_ROI,Right,Presubiculum,Limbic,MedialTemporal
+299,R_H_ROI,Right,Hippocampus (Cortical),Limbic,MedialTemporal
+300,R_ProS_ROI,Right,Prosubiculum,Limbic,MedialTemporal
+301,R_PeEc_ROI,Right,Perirhinal Ectocortex,Limbic,MedialTemporal
+302,R_STGa_ROI,Right,Anterior Superior Temporal Gyrus,VentralAttention,Temporal
+303,R_PBelt_ROI,Right,Posterior Auditory Parabelt,Auditory,Belt
+304,R_A5_ROI,Right,Auditory Association Area 5,Auditory,Association
+305,R_PHA1_ROI,Right,Parahippocampal Area 1,Limbic,Parahippocampal
+306,R_PHA3_ROI,Right,Parahippocampal Area 3,Limbic,Parahippocampal
+307,R_STSda_ROI,Right,Dorsal Anterior Superior Temporal Sulcus,VentralAttention,Temporal
+308,R_STSdp_ROI,Right,Dorsal Posterior Superior Temporal Sulcus,VentralAttention,Temporal
+309,R_STSvp_ROI,Right,Ventral Posterior Superior Temporal Sulcus,VentralAttention,Temporal
+310,R_TGd_ROI,Right,Dorsal Temporal Pole,Temporal,Association
+311,R_TE1a_ROI,Right,Anterior Inferotemporal Area TE1,Temporal,Inferotemporal
+312,R_TE1p_ROI,Right,Posterior Inferotemporal Area TE1,Temporal,Inferotemporal
+313,R_TE2a_ROI,Right,Anterior Inferotemporal Area TE2,Temporal,Inferotemporal
+314,R_TF_ROI,Right,Parahippocampal Area TF,Limbic,Parahippocampal
+315,R_TE2p_ROI,Right,Posterior Inferotemporal Area TE2,Temporal,Inferotemporal
+316,R_PHT_ROI,Right,Posterior Parahippocampal Area,Limbic,Parahippocampal
+317,R_PH_ROI,Right,Parahippocampal Area,Limbic,Parahippocampal
+318,R_TPOJ1_ROI,Right,Temporoparietal Occipital Junction 1,VentralAttention,Junction
+319,R_TPOJ2_ROI,Right,Temporoparietal Occipital Junction 2,VentralAttention,Junction
+320,R_TPOJ3_ROI,Right,Temporoparietal Occipital Junction 3,VentralAttention,Junction
+321,R_DVT_ROI,Right,Dorsal Visual Transitional Area,Visual,Dorsal
+322,R_PGp_ROI,Right,Posterior Parietal Area PG,DefaultMode,Parietal
+323,R_IP2_ROI,Right,Intraparietal Area 2,DorsalAttention,Parietal
+324,R_IP1_ROI,Right,Intraparietal Area 1,DorsalAttention,Parietal
+325,R_IP0_ROI,Right,Intraparietal Area 0,DorsalAttention,Parietal
+326,R_PFop_ROI,Right,Opercular Parietal Area PF,DefaultMode,Parietal
+327,R_PF_ROI,Right,Supramarginal Gyrus (Area PF),DefaultMode,Parietal
+328,R_PFm_ROI,Right,Medial Parietal Area PF,DefaultMode,Parietal
+329,R_PGi_ROI,Right,Inferior Angular Gyrus (Area PG),DefaultMode,Parietal
+330,R_PGs_ROI,Right,Superior Angular Gyrus (Area PG),DefaultMode,Parietal
+331,R_V6A_ROI,Right,Visual Area 6A (V6A),Visual,Dorsal
+332,R_VMV1_ROI,Right,Ventromedial Visual Area 1 (VMV1),Visual,Ventral
+333,R_VMV3_ROI,Right,Ventromedial Visual Area 3 (VMV3),Visual,Ventral
+334,R_PHA2_ROI,Right,Parahippocampal Area 2,Limbic,Parahippocampal
+335,R_V4t_ROI,Right,Transitional Visual Area 4 (V4t),Visual,Ventral
+336,R_FST_ROI,Right,Fundus of Superior Temporal Sulcus,Visual,Dorsal
+337,R_V3CD_ROI,Right,Dorsal Visual Transition Area 3 (V3CD),Visual,Dorsal
+338,R_LO3_ROI,Right,Lateral Occipital Area 3 (LO3),Visual,Lateral
+339,R_VMV2_ROI,Right,Ventromedial Visual Area 2 (VMV2),Visual,Ventral
+340,R_31pd_ROI,Right,Posterior Dorsal Cingulate Area 31,DefaultMode,PosteriorCingulate
+341,R_31a_ROI,Right,Anterior Cingulate Area 31,DefaultMode,PosteriorCingulate
+342,R_VVC_ROI,Right,Ventral Visual Complex,Visual,Ventral
+343,Sg25_L,Right,Subgenual Cingulate Area 25,Limbic,SubgenualCingulate
+344,Sgs32_L,Right,Subgenual Cingulate Area 32,Limbic,SubgenualCingulate
+345,R_pOFC_ROI,Right,Posterior Orbitofrontal Complex,Limbic,Orbitofrontal
+346,R_PoI1_ROI,Right,Posterior Insular Area 1,CinguloOpercular,Insula
+347,R_Ig_ROI,Right,Granular Insula,CinguloOpercular,Insula
+348,R_FOP5_ROI,Right,Frontal Opercular Area 5,CinguloOpercular,FrontalOperculum
+349,R_p10p_ROI,Right,Posterior Polar Area 10,DefaultMode,Prefrontal
+350,R_p47r_ROI,Right,Posterior Rostral Orbitofrontal Area 47,Limbic,Orbitofrontal
+351,R_TGv_ROI,Right,Ventral Temporal Pole,Temporal,Association
+352,R_MBelt_ROI,Right,Medial Auditory Parabelt,Auditory,Belt
+353,R_LBelt_ROI,Right,Lateral Auditory Parabelt,Auditory,Belt
+354,R_A4_ROI,Right,Auditory Association Area 4,Auditory,Association
+355,R_STSva_ROI,Right,Ventral Anterior Superior Temporal Sulcus,VentralAttention,Temporal
+356,R_TE1m_ROI,Right,Middle Inferotemporal Area TE1,Temporal,Inferotemporal
+357,R_PI_ROI,Right,Parieto-Insular Vestibular Cortex,VentralAttention,Vestibular
+358,R_a32pr_ROI,Right,Anterior Pregenual Cingulate Area 32,CinguloOpercular,AnteriorCingulate
+359,R_p24_ROI,Right,Posterior Cingulate Area 24,CinguloOpercular,MidCingulate
+360,HIP-head-m1-rh,Right,Hippocampus (Head Subfield m1),Limbic,Hippocampus
+361,HIP-head-m2-rh,Right,Hippocampus (Head Subfield m2),Limbic,Hippocampus
+362,THA-VAip-rh,Right,Thalamus (Ventral Anterior internal part),Thalamus,Thalamus
+363,THA-VAia-rh,Right,Thalamus (Ventral Anterior internal part),Thalamus,Thalamus
+364,HIP-head-l-rh,Right,Hippocampus (Head Lateral),Limbic,Hippocampus
+365,HIP-body-rh,Right,Hippocampus (Body),Limbic,Hippocampus
+366,HIP-tail-rh,Right,Hippocampus (Tail),Limbic,Hippocampus
+367,THA-VPm-rh,Right,Thalamus (Ventral Posteromedial),Thalamus,Thalamus
+368,THA-VPl-rh,Right,Thalamus (Ventral Posterolateral),Thalamus,Thalamus
+369,THA-VAs-rh,Right,Thalamus (Ventral Anterior superior part),Thalamus,Thalamus
+370,THA-DAm-rh,Right,Thalamus (Dorsomedial anterior medial part),Thalamus,Thalamus
+371,THA-DAl-rh,Right,Thalamus (Dorsomedial anterior lateral part),Thalamus,Thalamus
+372,PUT-VA-rh,Right,Putamen (Ventral Anterior),BasalGanglia,Striatum
+373,PUT-DA-rh,Right,Putamen (Dorsal Anterior),BasalGanglia,Striatum
+374,PUT-VP-rh,Right,Putamen (Ventral Posterior),BasalGanglia,Striatum
+375,PUT-DP-rh,Right,Putamen (Dorsal Posterior),BasalGanglia,Striatum
+376,CAU-VA-rh,Right,Caudate Nucleus (Ventral Anterior),BasalGanglia,Striatum
+377,CAU-DA-rh,Right,Caudate Nucleus (Dorsal Anterior),BasalGanglia,Striatum
+378,CAU-body-rh,Right,Caudate Nucleus (Body),BasalGanglia,Striatum
+379,CAU-tail-rh,Right,Caudate Nucleus (Tail),BasalGanglia,Striatum
+380,lAMY-rh,Right,Amygdala (Lateral),Limbic,Amygdala
+381,mAMY-rh,Right,Amygdala (Medial),Limbic,Amygdala
+382,THA-DP-rh,Right,Thalamus (Dorsal Posterior / Pulvinar),Thalamus,Thalamus
+383,NAc-shell-rh,Right,Nucleus Accumbens (Shell),Limbic,Striatum
+384,NAc-core-rh,Right,Nucleus Accumbens (Core),Limbic,Striatum
+385,pGP-rh,Right,Globus Pallidus (Posterior),BasalGanglia,Pallidum
+386,aGP-rh,Right,Globus Pallidus (Anterior),BasalGanglia,Pallidum
+387,HIP-head-m1-lh,Left,Hippocampus (Head Subfield m1),Limbic,Hippocampus
+388,HIP-head-m2-lh,Left,Hippocampus (Head Subfield m2),Limbic,Hippocampus
+389,THA-VAip-lh,Left,Thalamus (Ventral Anterior internal part),Thalamus,Thalamus
+390,THA-VAia-lh,Left,Thalamus (Ventral Anterior internal part),Thalamus,Thalamus
+391,HIP-head-l-lh,Left,Hippocampus (Head Lateral),Limbic,Hippocampus
+392,HIP-body-lh,Left,Hippocampus (Body),Limbic,Hippocampus
+393,HIP-tail-lh,Left,Hippocampus (Tail),Limbic,Hippocampus
+394,THA-VPm-lh,Left,Thalamus (Ventral Posteromedial),Thalamus,Thalamus
+395,THA-VPl-lh,Left,Thalamus (Ventral Posterolateral),Thalamus,Thalamus
+396,THA-VAs-lh,Left,Thalamus (Ventral Anterior superior part),Thalamus,Thalamus
+397,THA-DAm-lh,Left,Thalamus (Dorsomedial anterior medial part),Thalamus,Thalamus
+398,THA-DAl-lh,Left,Thalamus (Dorsomedial anterior lateral part),Thalamus,Thalamus
+399,PUT-VA-lh,Left,Putamen (Ventral Anterior),BasalGanglia,Striatum
+400,PUT-DA-lh,Left,Putamen (Dorsal Anterior),BasalGanglia,Striatum
+401,PUT-VP-lh,Left,Putamen (Ventral Posterior),BasalGanglia,Striatum
+402,PUT-DP-lh,Left,Putamen (Dorsal Posterior),BasalGanglia,Striatum
+403,CAU-VA-lh,Left,Caudate Nucleus (Ventral Anterior),BasalGanglia,Striatum
+404,CAU-DA-lh,Left,Caudate Nucleus (Dorsal Anterior),BasalGanglia,Striatum
+405,CAU-body-lh,Left,Caudate Nucleus (Body),BasalGanglia,Striatum
+406,CAU-tail-lh,Left,Caudate Nucleus (Tail),BasalGanglia,Striatum
+407,lAMY-lh,Left,Amygdala (Lateral),Limbic,Amygdala
+408,mAMY-lh,Left,Amygdala (Medial),Limbic,Amygdala
+409,THA-DP-lh,Left,Thalamus (Dorsal Posterior / Pulvinar),Thalamus,Thalamus
+410,NAc-shell-lh,Left,Nucleus Accumbens (Shell),Limbic,Striatum
+411,NAc-core-lh,Left,Nucleus Accumbens (Core),Limbic,Striatum
+412,pGP-lh,Left,Globus Pallidus (Posterior),BasalGanglia,Pallidum
+413,aGP-lh,Left,Globus Pallidus (Anterior),BasalGanglia,Pallidum
