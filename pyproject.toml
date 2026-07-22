@@ -22,6 +22,8 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
+
+
 dependencies = [
     "mne>=1.6",
     "nilearn>=0.10",
@@ -30,7 +32,8 @@ dependencies = [
     "tqdm",
     "numpy>=1.21",
     "scipy",
-    "mne-connectivity"  
+    "mne-connectivity",
+    "k3d"
 ]
 
 [tool.setuptools.packages.find]
