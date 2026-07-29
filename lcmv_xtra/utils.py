@@ -6,7 +6,6 @@ from pathlib import Path
 
 
 def parse_gpsc(filepath):
-    """Parse .gpsc file and return list of (name, x, y, z) tuples."""
     channels = []
     with open(filepath, 'r') as file:
         lines = file.readlines()
@@ -24,19 +23,6 @@ def parse_gpsc(filepath):
 
 
 def download_fsaverage(target_dir, verbose=False):
-    """
-    Download fsaverage and generate required BEM + source space files.
-
-    Parameters:
-        target_dir: Directory where 'fsaverage/' will be created.
-                    Example: '/templates', '/home/user/fsaverage', etc.
-        verbose: Enable logging
-
-    Files created:
-        {target_dir}/fsaverage/...          (from MNE)
-        {target_dir}/fsaverage/bem/fsaverage-5120-5120-5120-bem-sol.fif
-        {target_dir}/fsaverage-vol-5mm-src.fif
-    """
     target_dir = Path(target_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
 
@@ -49,7 +35,6 @@ def download_fsaverage(target_dir, verbose=False):
 
     fsaverage_dir = target_dir / 'fsaverage'
 
-    # 1. Download fsaverage if missing
     if not fsaverage_dir.exists():
         log.info("Downloading fsaverage (one-time, ~150 MB)...")
         mne.datasets.fetch_fsaverage(subjects_dir=target_dir)
@@ -57,7 +42,6 @@ def download_fsaverage(target_dir, verbose=False):
     else:
         log.info("fsaverage already present.")
 
-    # 2. Generate BEM if missing
     bem_file = fsaverage_dir / 'bem' / 'fsaverage-5120-5120-5120-bem-sol.fif'
     if not bem_file.exists():
         log.info("Generating BEM model (one-time, ~1-2 min)...")
@@ -70,22 +54,34 @@ def download_fsaverage(target_dir, verbose=False):
     else:
         log.info("BEM solution already exists.")
 
-    # 3. Generate volume source space bounded by inner skull (at TOP LEVEL of target_dir)
     src_file = target_dir / 'fsaverage-vol-5mm-src.fif'
+
+    needs_regeneration = False
+
     if not src_file.exists():
+        needs_regeneration = True
         log.info("Creating 5mm volume source space bounded by inner skull...")
+    else:
+        src_check = mne.read_source_spaces(str(src_file))
+        n_sources = len(src_check[0]['vertno'])
+        if n_sources >= 20000:
+            log.warning(f"⚠️  Existing source space has {n_sources} sources (likely old 90mm sphere).")
+            log.warning("   Regenerating with proper inner-skull bounding...")
+            needs_regeneration = True
+        else:
+            log.info(f"✓ Volume source space already exists ({n_sources} brain-bounded sources).")
+
+    if needs_regeneration:
         src = mne.setup_volume_source_space(
             subject='fsaverage',
             subjects_dir=target_dir,
             pos=5.0,
             mri='T1.mgz',
-            bem=bem_file,          # ← FIX: Pass BEM solution path to use inner skull boundary
-            mindist=5.0,           # Keep sources ≥5mm from inner skull boundary
+            bem=bem_file,
+            mindist=5.0,
             add_interpolator=True
         )
         src.save(src_file, overwrite=True)
-        log.info("✓ Volume source space saved (inner-skull bounded).")
-    else:
-        log.info("Volume source space already exists.")
+        log.info(f"✓ Volume source space saved ({len(src[0]['vertno'])} brain-bounded sources).")
 
     log.info(f"✅ fsaverage resources ready at: {target_dir}")
