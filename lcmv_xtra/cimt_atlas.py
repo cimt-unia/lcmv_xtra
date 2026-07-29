@@ -134,6 +134,7 @@ def _extract_stn_ts(stc, src, n_times, logger=None):
     return np.vstack(time_courses), roi_names
 
 
+
 # =============================================================================
 # MAIN UNIFIED FUNCTION
 # =============================================================================
@@ -161,7 +162,6 @@ def cimt_extraction(subject_output_dir, fsaverage_dir,
     cimt_labels : pd.DataFrame
         DataFrame loaded from package data (indices 0-447).
     """
-    # Apply user-specified STN radius if different from default
     global STN_RADIUS_MM
     if stn_radius_mm != STN_RADIUS_MM:
         STN_RADIUS_MM = stn_radius_mm
@@ -203,7 +203,6 @@ def cimt_extraction(subject_output_dir, fsaverage_dir,
     nk_atlas_dir = data_dir / 'nk_atlas'
     cimt_labels_path = data_dir / 'cimt_atlas' / 'cimt_atlas_labels.csv'
     
-    # Verify Bundled Files
     if not (gt_atlas_dir / "glasser_360_MNI152NLin6Asym.nii.gz").exists():
         raise FileNotFoundError("Bundled GT atlas missing.")
     if not (nk_atlas_dir / "atl-NettekovenSym32_space-MNI_dseg.nii").exists():
@@ -249,6 +248,22 @@ def cimt_extraction(subject_output_dir, fsaverage_dir,
     assert len(cimt_labels) == 448, "Label count mismatch!"
     assert list(cimt_labels['index']) == list(range(448)), "Indices not sequential!"
     
+    # Zero-variance ROI quality check
+    zero_var_mask = np.std(cimt_tc, axis=1) < 1e-12
+    n_zero_var = int(zero_var_mask.sum())
+    if n_zero_var > 0:
+        zero_var_names = cimt_labels.loc[zero_var_mask, 'roi_name'].tolist()
+        log.warning(
+            f"⚠️  {n_zero_var}/448 ROIs have zero variance "
+            f"(no valid sources assigned or silent region):"
+        )
+        for name in zero_var_names[:10]:
+            log.warning(f"   - {name}")
+        if n_zero_var > 10:
+            log.warning(f"   ... and {n_zero_var - 10} more")
+    else:
+        log.info("✓ All 448 ROIs have non-zero variance")
+    
     # 6. Save Outputs
     out_file = subject_output_dir / "cimt_time_courses.npy"
     np.save(out_file, cimt_tc)
@@ -259,3 +274,5 @@ def cimt_extraction(subject_output_dir, fsaverage_dir,
     log.info("="*60 + "\n")
 
     return cimt_tc, cimt_labels
+
+
