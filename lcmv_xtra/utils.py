@@ -22,15 +22,16 @@ def parse_gpsc(filepath):
             continue
     return channels
 
+
 def download_fsaverage(target_dir, verbose=False):
     """
     Download fsaverage and generate required BEM + source space files.
-    
+
     Parameters:
         target_dir: Directory where 'fsaverage/' will be created.
                     Example: '/templates', '/home/user/fsaverage', etc.
         verbose: Enable logging
-    
+
     Files created:
         {target_dir}/fsaverage/...          (from MNE)
         {target_dir}/fsaverage/bem/fsaverage-5120-5120-5120-bem-sol.fif
@@ -38,7 +39,7 @@ def download_fsaverage(target_dir, verbose=False):
     """
     target_dir = Path(target_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
-    
+
     log = logging.getLogger('lcmv.setup')
     log.setLevel(logging.INFO if verbose else logging.WARNING)
     if not log.handlers:
@@ -47,7 +48,7 @@ def download_fsaverage(target_dir, verbose=False):
         log.addHandler(handler)
 
     fsaverage_dir = target_dir / 'fsaverage'
-    
+
     # 1. Download fsaverage if missing
     if not fsaverage_dir.exists():
         log.info("Downloading fsaverage (one-time, ~150 MB)...")
@@ -69,19 +70,21 @@ def download_fsaverage(target_dir, verbose=False):
     else:
         log.info("BEM solution already exists.")
 
-    # 3. Generate volume source space (at TOP LEVEL of target_dir)
-    src_file = target_dir / 'fsaverage-vol-5mm-src.fif'  # ← FIXED: not inside fsaverage/
+    # 3. Generate volume source space bounded by inner skull (at TOP LEVEL of target_dir)
+    src_file = target_dir / 'fsaverage-vol-5mm-src.fif'
     if not src_file.exists():
-        log.info("Creating 5mm volume source space...")
+        log.info("Creating 5mm volume source space bounded by inner skull...")
         src = mne.setup_volume_source_space(
             subject='fsaverage',
             subjects_dir=target_dir,
             pos=5.0,
             mri='T1.mgz',
+            surface='inner_skull',   # ← FIX: Confine sources to brain tissue only
+            mindist=5.0,             # ← FIX: Keep sources ≥5mm from inner skull boundary
             add_interpolator=True
         )
         src.save(src_file, overwrite=True)
-        log.info("✓ Volume source space saved.")
+        log.info("✓ Volume source space saved (inner-skull bounded).")
     else:
         log.info("Volume source space already exists.")
 
