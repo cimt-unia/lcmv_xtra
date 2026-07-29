@@ -79,8 +79,8 @@ def download_fsaverage(target_dir, verbose=False):
             subjects_dir=target_dir,
             pos=5.0,
             mri='T1.mgz',
-            surface='inner_skull',   # ← FIX: Confine sources to brain tissue only
-            mindist=5.0,             # ← FIX: Keep sources ≥5mm from inner skull boundary
+            bem=bem_file,          # ← FIX: Pass BEM solution path to use inner skull boundary
+            mindist=5.0,           # Keep sources ≥5mm from inner skull boundary
             add_interpolator=True
         )
         src.save(src_file, overwrite=True)
