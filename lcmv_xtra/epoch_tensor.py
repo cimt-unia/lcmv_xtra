@@ -20,7 +20,7 @@ import logging
 import numpy as np
 import mne
 from pathlib import Path
-from typing import Dict, List, Optional, Literal
+from typing import Dict, List, Optional, Literal, Union
 from scipy import signal as sp_signal
 
 from .source_estimation import (
@@ -80,6 +80,7 @@ def _compute_forward_once(
     ch_pos: Dict,
     fsaverage_dir: Path,
     output_dir: Path,
+    n_jobs: int,
     log: logging.Logger,
 ) -> mne.Forward:
     """Compute coregistration and forward model ONCE for all epochs."""
@@ -96,7 +97,7 @@ def _compute_forward_once(
     bem = mne.read_bem_solution(bem_file)
     fwd = mne.make_forward_solution(
         raw.info, trans=trans, src=mne.read_source_spaces(src_file),
-        bem=bem, eeg=True, mindist=5.0, n_jobs=1,
+        bem=bem, eeg=True, mindist=5.0, n_jobs=n_jobs,
     )
     mne.write_forward_solution(fwd_file, fwd, overwrite=True)
     return fwd
@@ -108,6 +109,8 @@ def _run_lcmv_single_epoch(
     epoch_index: int,
     output_dir: Path,
     reg: float,
+    save_stc: bool,
+    n_jobs: int,
     log: logging.Logger,
 ) -> mne.SourceEstimate:
     """Compute covariance, LCMV filter, and STC for ONE epoch."""
@@ -123,7 +126,7 @@ def _run_lcmv_single_epoch(
 
     cov = mne.compute_raw_covariance(
         epoch_raw, method="oas", picks="eeg", rank=None,
-        n_jobs=1, verbose=False,
+        n_jobs=n_jobs, verbose=False,
     )
 
     filters = mne.beamformer.make_lcmv(
@@ -134,13 +137,14 @@ def _run_lcmv_single_epoch(
 
     stc = mne.beamformer.apply_lcmv_raw(raw=epoch_raw, filters=filters)
 
-    # Save per-epoch STC for debugging/inspection
-    epoch_label = f"epoch{epoch_index:03d}"
-    stc_file = output_dir / f"source_estimate_LCMV_{epoch_label}.h5"
-    stc.save(stc_file, ftype="h5", overwrite=True, verbose=False)
+    # Optionally save per-epoch STC for debugging/inspection
+    if save_stc:
+        epoch_label = f"epoch{epoch_index:03d}"
+        stc_file = output_dir / f"source_estimate_LCMV_{epoch_label}.h5"
+        stc.save(stc_file, ftype="h5", overwrite=True, verbose=False)
 
     log.info(
-        f"  {epoch_label}: {stc.data.shape[0]} src × "
+        f"  Epoch {epoch_index:03d}: {stc.data.shape[0]} src × "
         f"{stc.data.shape[1]} samp (T/N={tn_ratio:.1f})"
     )
     return stc
@@ -154,35 +158,18 @@ def _downsample_roi_time_courses(
 ) -> tuple[List[np.ndarray], float]:
     """
     Downsample ROI time courses from native to target sampling rate.
-    
-    Parameters
-    ----------
-    epoch_time_courses : list of np.ndarray
-        Each element has shape (n_rois, n_samples_native).
-    native_sfreq : float
-        Original sampling frequency.
-    target_sfreq : float
-        Desired output sampling frequency.
-    log : logging.Logger
-        Logger instance.
-        
-    Returns
-    -------
-    resampled : list of np.ndarray
-        Downsampled time courses, each shape (n_rois, n_samples_target).
-    output_sfreq : float
-        Actual output sampling frequency.
+    Handles non-integer sampling rates gracefully.
     """
     if native_sfreq <= target_sfreq:
         return epoch_time_courses, native_sfreq
 
-    up = int(target_sfreq)
-    down = int(native_sfreq)
-    gcd = np.gcd(up, down)
-
     log.info(
-        f"Downsampling ROI time courses: {native_sfreq:.0f}Hz → {target_sfreq:.0f}Hz"
+        f"Downsampling ROI time courses: {native_sfreq:.1f}Hz → {target_sfreq:.1f}Hz"
     )
+
+    up = int(round(target_sfreq))
+    down = int(round(native_sfreq))
+    gcd = np.gcd(up, down)
 
     resampled = [
         sp_signal.resample_poly(tc, up // gcd, down // gcd, axis=1)
@@ -192,11 +179,11 @@ def _downsample_roi_time_courses(
 
 
 def execute_epoch_tensor(
-    project_base: Path | str,
+    project_base: Union[Path, str],
     subject_id: str,
     task: str,
-    ica_file_path: str | Path,
-    fsaverage_dir: Path | str,
+    ica_file_path: Union[str, Path],
+    fsaverage_dir: Union[Path, str],
     roi_coordinates: Dict[str, List[float]],
     epoch_duration_sec: float = DEFAULT_EPOCH_SEC,
     overlap_sec: float = DEFAULT_OVERLAP_SEC,
@@ -204,6 +191,9 @@ def execute_epoch_tensor(
     mode: Literal["sphere", "single"] = "sphere",
     reg: float = DEFAULT_REG,
     target_sfreq: float = DEFAULT_TARGET_SFREQ,
+    output_dir: Optional[Union[Path, str]] = None,
+    save_epoch_stcs: bool = True,
+    n_jobs: int = 1,
     verbose: bool = False,
 ) -> Path:
     """
@@ -243,6 +233,14 @@ def execute_epoch_tensor(
         Target sampling frequency for the OUTPUT tensor.
         Source estimation runs at native sfreq; downsampling occurs
         after ROI extraction to preserve covariance stability.
+    output_dir : Path, str, or None
+        Custom output directory. If None, defaults to
+        ``{project_base}/derivatives/lcmv/{subject_id}_{task}_epoched``.
+    save_epoch_stcs : bool
+        If True, save individual per-epoch STC .h5 files for inspection.
+        Set to False for production runs to reduce disk usage.
+    n_jobs : int
+        Number of parallel jobs for forward solution and covariance.
     verbose : bool
         Enable console logging.
 
@@ -258,8 +256,11 @@ def execute_epoch_tensor(
     fsaverage_dir = Path(fsaverage_dir)
     ica_path = project_base / ica_file_path
 
-    # Create subject output directory
-    output_dir = project_base / "derivatives" / "lcmv" / f"{subject_id}_{task}_epoched"
+    # Resolve output directory
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+    else:
+        output_dir = project_base / "derivatives" / "lcmv" / f"{subject_id}_{task}_epoched"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     log = _setup_logger(subject_id, f"{task}_epoched", output_dir, verbose)
@@ -270,6 +271,8 @@ def execute_epoch_tensor(
     log.info(f"  ROIs: {list(roi_coordinates.keys())}")
     log.info(f"  Mode: {mode} | Radius: {radius_mm}mm")
     log.info(f"  Output sfreq: {target_sfreq}Hz (LCMV runs at native)")
+    log.info(f"  Save epoch STCs: {save_epoch_stcs} | n_jobs: {n_jobs}")
+    log.info(f"  Output dir: {output_dir}")
     log.info("=" * 60)
 
     # 1. Load subject (KEEP NATIVE SFREQ for covariance stability)
@@ -284,12 +287,10 @@ def execute_epoch_tensor(
         logger=log,
     )
     native_sfreq = raw.info["sfreq"]
-    log.info(f"Native sampling rate: {native_sfreq:.0f}Hz (preserved for LCMV)")
-
-    # NO DOWNSAMPLING HERE — native rate required for stable per-epoch covariance
+    log.info(f"Native sampling rate: {native_sfreq:.1f}Hz (preserved for LCMV)")
 
     # 2. Forward model (computed once at NATIVE sfreq)
-    fwd = _compute_forward_once(raw, ch_pos, fsaverage_dir, output_dir, log)
+    fwd = _compute_forward_once(raw, ch_pos, fsaverage_dir, output_dir, n_jobs, log)
 
     _, src_file = validate_fsaverage(fsaverage_dir)
     src = mne.read_source_spaces(src_file)
@@ -301,9 +302,11 @@ def execute_epoch_tensor(
     epoch_time_courses: List[np.ndarray] = []
     roi_names: Optional[List[str]] = None
 
-    log.info(f"Processing {len(epochs_raw)} epochs at {native_sfreq:.0f}Hz...")
+    log.info(f"Processing {len(epochs_raw)} epochs at {native_sfreq:.1f}Hz...")
     for idx, epoch_raw in enumerate(epochs_raw):
-        stc = _run_lcmv_single_epoch(epoch_raw, fwd, idx, output_dir, reg, log)
+        stc = _run_lcmv_single_epoch(
+            epoch_raw, fwd, idx, output_dir, reg, save_epoch_stcs, n_jobs, log
+        )
 
         tc, names = extract_custom_roi_time_courses(
             stc=stc, src=src,
@@ -345,7 +348,7 @@ def execute_epoch_tensor(
         f"Saved epoched tensor: {stacked.shape} @ {output_sfreq}Hz → {tensor_file}"
     )
 
-    # 7. Save metadata
+    # 7. Save metadata (keys match execute_source_estimation conventions)
     metadata = {
         "subject_id": subject_id,
         "task": task,
@@ -355,12 +358,15 @@ def execute_epoch_tensor(
         "overlap_sec": overlap_sec,
         "sfreq_hz": float(output_sfreq),
         "native_sfreq_hz": float(native_sfreq),
+        "n_sources": int(stacked.shape[1]),
+        "n_timepoints": int(stacked.shape[2]),
         "n_rois": len(roi_names),
         "roi_names": roi_names,
         "roi_coordinates": roi_coordinates,
         "radius_mm": radius_mm,
         "mode": mode,
         "regularization": reg,
+        "save_epoch_stcs": save_epoch_stcs,
         "subject_output": str(output_dir),
         "fsaverage_dir": str(fsaverage_dir),
     }
