@@ -3,14 +3,16 @@
 Epoched LCMV Source Estimation
 ==============================
 Splits raw EEG into fixed-duration segments, runs independent LCMV
-beamforming on each segment (per-epoch covariance), extracts time 
-courses at user-specified MNI coordinates, and assembles an epoched tensor.
+beamforming on each segment (per-epoch covariance at NATIVE sfreq),
+extracts time courses at user-specified MNI coordinates, downsamples
+the ROI time courses, and assembles an epoched tensor.
 
 This is distinct from:
   - Fixed LCMV (one filter for entire recording)
   - Post-hoc epoching (continuous LCMV then split time courses via lcmv_stats)
 
-Here: raw → split → per-epoch LCMV → per-epoch STC → tensor.
+Pipeline: raw (native) → split → per-epoch LCMV → per-epoch STC →
+          ROI extraction → downsample → tensor.
 """
 
 import json
@@ -19,6 +21,7 @@ import numpy as np
 import mne
 from pathlib import Path
 from typing import Dict, List, Optional, Literal
+from scipy import signal as sp_signal
 
 from .source_estimation import (
     load_subject,
@@ -92,7 +95,7 @@ def _compute_forward_once(
     fwd_file = output_dir / "fsaverage-vol-eeg-fwd.fif"
     bem = mne.read_bem_solution(bem_file)
     fwd = mne.make_forward_solution(
-        raw.info, trans=trans, src=mne.read_source_spaces(src_file), 
+        raw.info, trans=trans, src=mne.read_source_spaces(src_file),
         bem=bem, eeg=True, mindist=5.0, n_jobs=1,
     )
     mne.write_forward_solution(fwd_file, fwd, overwrite=True)
@@ -135,12 +138,57 @@ def _run_lcmv_single_epoch(
     epoch_label = f"epoch{epoch_index:03d}"
     stc_file = output_dir / f"source_estimate_LCMV_{epoch_label}.h5"
     stc.save(stc_file, ftype="h5", overwrite=True, verbose=False)
-    
+
     log.info(
         f"  {epoch_label}: {stc.data.shape[0]} src × "
         f"{stc.data.shape[1]} samp (T/N={tn_ratio:.1f})"
     )
     return stc
+
+
+def _downsample_roi_time_courses(
+    epoch_time_courses: List[np.ndarray],
+    native_sfreq: float,
+    target_sfreq: float,
+    log: logging.Logger,
+) -> tuple[List[np.ndarray], float]:
+    """
+    Downsample ROI time courses from native to target sampling rate.
+    
+    Parameters
+    ----------
+    epoch_time_courses : list of np.ndarray
+        Each element has shape (n_rois, n_samples_native).
+    native_sfreq : float
+        Original sampling frequency.
+    target_sfreq : float
+        Desired output sampling frequency.
+    log : logging.Logger
+        Logger instance.
+        
+    Returns
+    -------
+    resampled : list of np.ndarray
+        Downsampled time courses, each shape (n_rois, n_samples_target).
+    output_sfreq : float
+        Actual output sampling frequency.
+    """
+    if native_sfreq <= target_sfreq:
+        return epoch_time_courses, native_sfreq
+
+    up = int(target_sfreq)
+    down = int(native_sfreq)
+    gcd = np.gcd(up, down)
+
+    log.info(
+        f"Downsampling ROI time courses: {native_sfreq:.0f}Hz → {target_sfreq:.0f}Hz"
+    )
+
+    resampled = [
+        sp_signal.resample_poly(tc, up // gcd, down // gcd, axis=1)
+        for tc in epoch_time_courses
+    ]
+    return resampled, target_sfreq
 
 
 def execute_epoch_tensor(
@@ -160,10 +208,48 @@ def execute_epoch_tensor(
 ) -> Path:
     """
     Run epoched LCMV source estimation for a single subject.
-    
+
     Splits raw EEG into fixed-duration segments, runs independent LCMV
-    beamforming on each segment, extracts time courses at user-specified
-    MNI coordinates, and assembles an epoched tensor.
+    beamforming on each segment AT NATIVE SAMPLING RATE, extracts time
+    courses at user-specified MNI coordinates, downsamples the extracted
+    ROI signals to target_sfreq, and assembles an epoched tensor.
+
+    Parameters
+    ----------
+    project_base : Path or str
+        Root directory of the BIDS-like project.
+    subject_id : str
+        Subject identifier.
+    task : str
+        Task/condition name.
+    ica_file_path : str or Path
+        Relative path to the cleaned FIF file from project_base.
+    fsaverage_dir : Path or str
+        Path to fsaverage resources.
+    roi_coordinates : dict
+        MNI coordinates for ROI extraction. Keys are ROI names,
+        values are [x, y, z] in mm.
+    epoch_duration_sec : float
+        Duration of each epoch in seconds.
+    overlap_sec : float
+        Overlap between consecutive epochs in seconds.
+    radius_mm : float
+        Radius for sphere averaging.
+    mode : str
+        'sphere' or 'single' voxel extraction.
+    reg : float
+        LCMV regularization parameter.
+    target_sfreq : float
+        Target sampling frequency for the OUTPUT tensor.
+        Source estimation runs at native sfreq; downsampling occurs
+        after ROI extraction to preserve covariance stability.
+    verbose : bool
+        Enable console logging.
+
+    Returns
+    -------
+    Path
+        Path to the saved epoched tensor (.npz).
     """
     if not roi_coordinates:
         raise ValueError("roi_coordinates must contain at least one ROI.")
@@ -171,11 +257,11 @@ def execute_epoch_tensor(
     project_base = Path(project_base)
     fsaverage_dir = Path(fsaverage_dir)
     ica_path = project_base / ica_file_path
-    
+
     # Create subject output directory
     output_dir = project_base / "derivatives" / "lcmv" / f"{subject_id}_{task}_epoched"
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     log = _setup_logger(subject_id, f"{task}_epoched", output_dir, verbose)
 
     log.info("=" * 60)
@@ -183,9 +269,10 @@ def execute_epoch_tensor(
     log.info(f"  Epoch: {epoch_duration_sec}s | Overlap: {overlap_sec}s")
     log.info(f"  ROIs: {list(roi_coordinates.keys())}")
     log.info(f"  Mode: {mode} | Radius: {radius_mm}mm")
+    log.info(f"  Output sfreq: {target_sfreq}Hz (LCMV runs at native)")
     log.info("=" * 60)
 
-    # 1. Load subject
+    # 1. Load subject (KEEP NATIVE SFREQ for covariance stability)
     import lcmv_xtra
     package_dir = Path(lcmv_xtra.__file__).parent
     gpsc_path = package_dir / "data" / "bel_280" / "ghw280_from_egig.gpsc"
@@ -196,29 +283,28 @@ def execute_epoch_tensor(
         subject_id=subject_id,
         logger=log,
     )
+    native_sfreq = raw.info["sfreq"]
+    log.info(f"Native sampling rate: {native_sfreq:.0f}Hz (preserved for LCMV)")
 
-    # Downsample before splitting to match target_sfreq
-    if raw.info["sfreq"] > target_sfreq:
-        log.info(f"Downsampling: {raw.info['sfreq']:.0f}Hz → {target_sfreq:.0f}Hz")
-        raw = raw.copy().resample(target_sfreq, npad="auto")
+    # NO DOWNSAMPLING HERE — native rate required for stable per-epoch covariance
 
-    # 2. Forward model (computed once)
+    # 2. Forward model (computed once at NATIVE sfreq)
     fwd = _compute_forward_once(raw, ch_pos, fsaverage_dir, output_dir, log)
 
     _, src_file = validate_fsaverage(fsaverage_dir)
     src = mne.read_source_spaces(src_file)
 
-    # 3. Split into epochs
+    # 3. Split into epochs (at NATIVE sfreq)
     epochs_raw = _split_raw_into_epochs(raw, epoch_duration_sec, overlap_sec)
 
-    # 4. LCMV per epoch + ROI extraction
+    # 4. LCMV per epoch + ROI extraction (at NATIVE sfreq)
     epoch_time_courses: List[np.ndarray] = []
     roi_names: Optional[List[str]] = None
 
-    log.info(f"Processing {len(epochs_raw)} epochs...")
+    log.info(f"Processing {len(epochs_raw)} epochs at {native_sfreq:.0f}Hz...")
     for idx, epoch_raw in enumerate(epochs_raw):
         stc = _run_lcmv_single_epoch(epoch_raw, fwd, idx, output_dir, reg, log)
-        
+
         tc, names = extract_custom_roi_time_courses(
             stc=stc, src=src,
             roi_coordinates=roi_coordinates,
@@ -233,26 +319,33 @@ def execute_epoch_tensor(
     if not epoch_time_courses:
         raise RuntimeError("No epochs were successfully processed.")
 
-    # 5. Assemble tensor
-    min_samples = min(tc.shape[1] for tc in epoch_time_courses)
-    truncated = [tc[:, :min_samples] for tc in epoch_time_courses]
+    # 5. Downsample ROI time courses BEFORE tensor assembly
+    resampled_courses, output_sfreq = _downsample_roi_time_courses(
+        epoch_time_courses, native_sfreq, target_sfreq, log
+    )
+
+    # 6. Assemble tensor (at target_sfreq)
+    min_samples = min(tc.shape[1] for tc in resampled_courses)
+    truncated = [tc[:, :min_samples] for tc in resampled_courses]
     stacked = np.stack(truncated, axis=0)  # (n_epochs, n_rois, n_samples)
 
-    sfreq = raw.info["sfreq"]
     tensor_file = output_dir / f"{subject_id}_{task}_epoched_tensor.npz"
     np.savez_compressed(
         tensor_file,
         data=stacked,
         roi_names=np.array(roi_names),
-        sfreq=sfreq,
+        sfreq=output_sfreq,
+        native_sfreq=native_sfreq,
         epoch_duration_sec=epoch_duration_sec,
         overlap_sec=overlap_sec,
         n_epochs=len(epoch_time_courses),
         is_epoched=True,
     )
-    log.info(f"Saved epoched tensor: {stacked.shape} → {tensor_file}")
+    log.info(
+        f"Saved epoched tensor: {stacked.shape} @ {output_sfreq}Hz → {tensor_file}"
+    )
 
-    # 6. Save metadata
+    # 7. Save metadata
     metadata = {
         "subject_id": subject_id,
         "task": task,
@@ -260,7 +353,8 @@ def execute_epoch_tensor(
         "n_epochs": len(epochs_raw),
         "epoch_duration_sec": epoch_duration_sec,
         "overlap_sec": overlap_sec,
-        "sfreq_hz": float(sfreq),
+        "sfreq_hz": float(output_sfreq),
+        "native_sfreq_hz": float(native_sfreq),
         "n_rois": len(roi_names),
         "roi_names": roi_names,
         "roi_coordinates": roi_coordinates,
@@ -278,29 +372,5 @@ def execute_epoch_tensor(
     log.info("=" * 60)
     log.info("Epoched LCMV complete.")
     log.info("=" * 60)
-    
+
     return tensor_file
-
-'''
-# Usage Example
-from lcmv_xtra import execute_epoch_tensor
-from pathlib import Path
-
-mni_rois_coords = {
-    "R1": [10.958, 5.563, -4.948],
-    "L1": [-15.983, 6.077, 0.027],
-    "STN-L": [-11.89, -14.51, -6.40],
-}
-
-tensor_path = execute_epoch_tensor(
-    project_base="/xtra",
-    subject_id="Sb02",
-    task="gain",
-    ica_file_path="eeg_cleaned.fif",
-    fsaverage_dir="fs",
-    roi_coordinates=mni_rois_coords,
-    epoch_duration_sec=10.0,
-    overlap_sec=0.0,
-    verbose=True,
-)
-'''
