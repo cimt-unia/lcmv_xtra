@@ -42,7 +42,7 @@ from .coreg import plot_coregistration
 
 from .epoch_tensor import execute_epoch_tensor
 
-__version__ = "0.2.0"
+__version__ = "0.1.0"
 
 __all__ = [
     # Core Pipeline
