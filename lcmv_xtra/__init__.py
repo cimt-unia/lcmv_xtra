@@ -40,6 +40,8 @@ from .viz import (
 
 from .coreg import plot_coregistration
 
+from .epoch_tensor import execute_epoch_tensor
+
 __version__ = "0.2.0"
 
 __all__ = [
@@ -61,6 +63,9 @@ __all__ = [
     # Tensor / ML Aggregation (Custom MNI Coordinates)
     "assemble_custom_tensor",
     "extract_custom_roi_time_courses",
+
+    # Epoched Source Estimation (Custom MNI Coordinates)
+    "execute_epoch_tensor",
     
     # Connectivity Analysis
     "compute_gt_motor_connectivity",
