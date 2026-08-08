@@ -40,7 +40,6 @@ DEFAULT_REG: float = 0.05
 DEFAULT_TARGET_SFREQ: float = 250.0
 MIN_TN_RATIO: float = 8.0  # Warning threshold for BEL 280
 
-
 def _split_raw_into_epochs(
     raw: mne.io.Raw,
     epoch_duration_sec: float,
@@ -64,7 +63,8 @@ def _split_raw_into_epochs(
     while start + epoch_samples <= n_times:
         tmin = start / sfreq
         tmax = (start + epoch_samples) / sfreq
-        segment = raw.copy().crop(tmin=tmin, tmax=tmax, include_last=True)
+        # FIX: Use include_tmax instead of deprecated include_last
+        segment = raw.copy().crop(tmin=tmin, tmax=tmax, include_tmax=True)
         epochs.append(segment)
         start += step_samples
 
@@ -73,7 +73,6 @@ def _split_raw_into_epochs(
         f"({epoch_duration_sec}s, overlap={overlap_sec}s, sfreq={sfreq}Hz)"
     )
     return epochs
-
 
 def _compute_forward_once(
     raw: mne.io.Raw,
