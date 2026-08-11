@@ -12,7 +12,10 @@ import logging
 import lcmv_xtra
 import numpy as np
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
+from mne.time_frequency import csd_morlet
+from mne.beamformer import make_dics, apply_dics_csd
+
 from .source_estimation import load_subject, validate_fsaverage, _run_coregistration, _setup_logger
 
 # MNE logging
@@ -32,7 +35,6 @@ def dics_beamformer(
     real_filter: bool = False,
     weight_norm: Optional[str] = None,
     depth: float = 1.0,
-    inversion: str = "single",
     pick_ori: str = "max-power",
     reduce_rank: bool = False,
     epoch_duration_sec: float = 7.5,
@@ -75,12 +77,10 @@ def dics_beamformer(
         Weight normalization. None works best for DICS with self-noise CSD.
     depth : float or None
         Depth weighting. 1.0 is DICS default; None disables (LCMV equivalent).
-    inversion : str
-        'single' (per-dipole) or 'matrix' (joint). 'single' suits focal sources.
     pick_ori : str
         Orientation constraint. 'max-power' recommended for power maps.
     reduce_rank : bool
-        Rank reduction. Must be False when inversion='single'.
+        Rank reduction. 
     epoch_duration_sec : float
         Duration of synthetic epochs for CSD computation.
     n_jobs : int
@@ -155,7 +155,7 @@ def dics_beamformer(
     # Compute CSD at frequency bins within the band
     freqs = np.linspace(freq_band[0], freq_band[1], n_freq_bins)
     log.info(f"Computing CSD at {freqs.tolist()} Hz...")
-    csd_signal = mne.time_frequency.csd_morlet(
+    csd_signal = csd_morlet(
         epochs, freqs, tmin=0.0, tmax=epoch_duration_sec, decim=1
     )
     # Use signal CSD as noise CSD (required for EEG without separate baseline)
@@ -165,14 +165,13 @@ def dics_beamformer(
     # Build DICS spatial filters
     log.info("Computing DICS spatial filters...")
     log.info(f"  reg={reg}, real_filter={real_filter}, weight_norm={weight_norm}")
-    log.info(f"  depth={depth}, inversion={inversion}, reduce_rank={reduce_rank}")
+    log.info(f"  depth={depth}, pick_ori={pick_ori}, reduce_rank={reduce_rank}")
 
     # Enforce valid parameter combinations
-    if reduce_rank and inversion == "single":
-        log.warning("reduce_rank=True incompatible with inversion='single'; forcing reduce_rank=False")
-        reduce_rank = False
+    if reduce_rank and pick_ori == "vector":
+        log.warning("reduce_rank=True with pick_ori='vector' can be unstable; proceeding with caution.")
 
-    filters = mne.beamformer.make_dics(
+    filters = make_dics(
         epochs.info, fwd, csd_signal,
         noise_csd=csd_noise,
         reg=reg,
@@ -181,13 +180,12 @@ def dics_beamformer(
         real_filter=real_filter,
         weight_norm=weight_norm,
         depth=depth,
-        inversion=inversion,
         verbose=False,
     )
 
     # Apply DICS to get source power per frequency
     log.info("Applying DICS filters to CSD...")
-    stc, stc_freqs = mne.beamformer.apply_dics_csd(csd_signal, filters)
+    stc, stc_freqs = apply_dics_csd(csd_signal, filters)
     log.info(f"Source power map: {stc.data.shape[0]} sources × {len(stc_freqs)} frequencies")
 
     # Average across frequency bins → single band-power map
@@ -210,6 +208,7 @@ def dics_beamformer(
         'sfreq_hz': float(input.info['sfreq']),
         'duration_min': float(input.n_times / input.info['sfreq'] / 60),
         'n_sources': int(avg_stc.data.shape[0]),
+        'n_timepoints': int(avg_stc.data.shape[1]),  # Added for lcmv_xtra atlas extraction compatibility
         'n_frequencies': len(stc_freqs),
         'freq_band_hz': list(freq_band),
         'freq_bins_hz': [float(f) for f in stc_freqs],
@@ -221,7 +220,6 @@ def dics_beamformer(
             'real_filter': real_filter,
             'weight_norm': weight_norm,
             'depth': depth,
-            'inversion': inversion,
             'pick_ori': pick_ori,
             'reduce_rank': reduce_rank,
         },
@@ -251,7 +249,6 @@ def execute_source_estimation_band(
     real_filter: bool = False,
     weight_norm: Optional[str] = None,
     depth: float = 1.0,
-    inversion: str = "single",
     pick_ori: str = "max-power",
     reduce_rank: bool = False,
     epoch_duration_sec: float = 7.5,
@@ -289,12 +286,10 @@ def execute_source_estimation_band(
         Weight normalization scheme.
     depth : float or None
         Depth weighting value.
-    inversion : str
-        'single' or 'matrix'.
     pick_ori : str
         Orientation constraint.
     reduce_rank : bool
-        Enable rank reduction (only with inversion='matrix').
+        Enable rank reduction.
     epoch_duration_sec : float
         Synthetic epoch length for CSD computation.
     n_jobs : int
@@ -338,7 +333,6 @@ def execute_source_estimation_band(
         real_filter=real_filter,
         weight_norm=weight_norm,
         depth=depth,
-        inversion=inversion,
         pick_ori=pick_ori,
         reduce_rank=reduce_rank,
         epoch_duration_sec=epoch_duration_sec,
