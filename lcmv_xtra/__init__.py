@@ -42,8 +42,6 @@ from .coreg import plot_coregistration
 
 from .epoch_tensor import execute_epoch_tensor
 
-from .source_freq_band import execute_source_estimation_band, lcmv_beamformer_band
-
 
 
 __version__ = "0.1.0"
@@ -86,7 +84,4 @@ __all__ = [
     "plot_group_psd_comparison",
     "plot_coregistration",
 
-    # Band SRC
-    "execute_source_estimation_band",
-    "lcmv_beamformer_band",
 ]
