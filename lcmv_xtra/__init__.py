@@ -42,7 +42,13 @@ from .coreg import plot_coregistration
 
 from .epoch_tensor import execute_epoch_tensor
 
-
+from .source_estimation_atlas import (
+    execute_source_estimation_atlas,
+    lcmv_beamformer_cimt,
+    reduce_leadfield_to_cimt,
+    lookup_mni_coordinate,
+    lookup_multiple_coordinates,
+)
 
 __version__ = "0.1.0"
 
@@ -83,5 +89,12 @@ __all__ = [
     "plot_cimt_rois",
     "plot_group_psd_comparison",
     "plot_coregistration",
+
+    # Atlas-Constrained Source Estimation (CIMT Before Inverse)
+    "execute_source_estimation_atlas",
+    "lcmv_beamformer_cimt",
+    "reduce_leadfield_to_cimt",
+    "lookup_mni_coordinate",
+    "lookup_multiple_coordinates",
 
 ]
