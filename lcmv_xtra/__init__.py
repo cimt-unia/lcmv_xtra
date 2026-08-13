@@ -22,6 +22,9 @@ from .custom_tensor import (
     extract_custom_roi_time_courses,
 )
 
+# Atlas-Constrained Tensor Assembly (CIMT Before Inverse)
+from .atlas_tensor import assemble_atlas_tensor
+
 from .connectivity import (
     compute_gt_motor_connectivity,
     compute_gt_full_connectivity,
@@ -96,5 +99,8 @@ __all__ = [
     "reduce_leadfield_to_cimt",
     "lookup_mni_coordinate",
     "lookup_multiple_coordinates",
+
+    # Tensor / ML Aggregation (CIMT Atlas-Before-Inverse)
+    "assemble_atlas_tensor",
 
 ]
