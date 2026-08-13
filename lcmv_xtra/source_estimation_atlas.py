@@ -333,14 +333,20 @@ def lcmv_beamformer_cimt(
     )
     mne.write_forward_solution(fwd_file, fwd, overwrite=True)
 
-    # Reduce to 448 CIMT ROIs
+    # ── Reduce to 448 CIMT ROIs ──
     log.info("Reducing lead field to 448 CIMT ROIs...")
     G_reduced, voxel_labels, roi_counts = reduce_leadfield_to_cimt(
         fwd=fwd, src=src, verbose=True,
     )
 
+    # ── Update ALL forward solution metadata to match reduced dimensions ──
+    # MNE's _compute_beamformer asserts nn.shape == (n_sources, 3) internally.
+    # Without updating source_nn and vertno, make_lcmv raises AssertionError.
+    n_roi = 448
     fwd['sol']['data'] = G_reduced
-    fwd['nsource'] = 448
+    fwd['nsource'] = n_roi
+    fwd['sol']['source_nn'] = np.tile([0.0, 0.0, 1.0], (n_roi, 1)).astype(np.float32)
+    fwd['src'][0]['vertno'] = np.arange(n_roi, dtype=np.int32)
 
     # Save reduced lead field and voxel mapping
     np.save(output_dir / 'G_cimt_448.npy', G_reduced)
