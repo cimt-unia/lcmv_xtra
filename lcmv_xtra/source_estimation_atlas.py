@@ -20,7 +20,6 @@ import nibabel as nib
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 from nilearn import image
-from mne.io.constants import FIFF
 
 import lcmv_xtra
 from lcmv_xtra.atlas_extraction import _get_mni_coordinates, _coords_to_voxels
@@ -64,32 +63,11 @@ def lookup_mni_coordinate(
 ) -> Dict:
     """
     Find the closest CIMT ROI to an arbitrary MNI coordinate.
-
-    Parameters
-    ----------
-    mni_coord : list or array of shape (3,)
-        MNI coordinates in mm, e.g., [-11.89, -14.51, -6.40].
-    radius_mm : float
-        Search radius in mm. Falls back to nearest labeled voxel
-        if nothing is found within this radius.
-
-    Returns
-    -------
-    dict with keys:
-        'roi_index'       : int (0-447)
-        'nifti_label'     : int (1-448)
-        'roi_name'        : str (e.g., 'STN-lh')
-        'region_full_name': str (e.g., 'Subthalamic Nucleus')
-        'hemisphere'      : str ('L', 'R', or 'B')
-        'functional_system': str
-        'distance_mm'     : float
-        'voxel_mni'       : list of 3 floats
     """
     atlas_img, labels_df = _load_cimt_atlas()
     atlas_data = atlas_img.get_fdata().astype(np.int32)
     coord = np.asarray(mni_coord, dtype=np.float64)
 
-    # Convert MNI → voxel index
     inv_affine = np.linalg.inv(atlas_img.affine)
     vox = np.round(inv_affine @ np.append(coord, 1.0)).astype(int)[:3]
 
@@ -101,7 +79,6 @@ def lookup_mni_coordinate(
         vox_mni = nib.affines.apply_affine(atlas_img.affine, vox.astype(float))
         distance_mm = float(np.linalg.norm(vox_mni - coord))
 
-        # If unlabeled or outside radius, search neighborhood
         if label == 0 or distance_mm > radius_mm:
             r_vox = int(np.ceil(radius_mm / np.min(np.abs(np.diag(atlas_img.affine)[:3])))) + 1
             x_min, x_max = max(0, vox[0] - r_vox), min(shape[0], vox[0] + r_vox + 1)
@@ -121,7 +98,6 @@ def lookup_mni_coordinate(
                 vox_mni = labeled_mni[nearest]
                 distance_mm = float(distances[nearest])
             else:
-                # Global fallback
                 labeled_voxels = np.argwhere(atlas_data > 0)
                 labeled_mni = nib.affines.apply_affine(atlas_img.affine, labeled_voxels.astype(float))
                 distances = np.linalg.norm(labeled_mni - coord, axis=1)
@@ -131,7 +107,6 @@ def lookup_mni_coordinate(
                 vox_mni = labeled_mni[nearest]
                 distance_mm = float(distances[nearest])
     else:
-        # Outside atlas volume entirely — global search
         labeled_voxels = np.argwhere(atlas_data > 0)
         labeled_mni = nib.affines.apply_affine(atlas_img.affine, labeled_voxels.astype(float))
         distances = np.linalg.norm(labeled_mni - coord, axis=1)
@@ -141,7 +116,7 @@ def lookup_mni_coordinate(
         vox_mni = labeled_mni[nearest]
         distance_mm = float(distances[nearest])
 
-    roi_index = label - 1  # NIfTI 1-448 → CSV index 0-447
+    roi_index = label - 1
     row = labels_df.iloc[roi_index]
 
     return {
@@ -171,48 +146,26 @@ def lookup_multiple_coordinates(
 def reduce_leadfield_to_cimt(fwd, src, verbose=False):
     """
     Reduce full volumetric lead field to 448 CIMT ROI channels.
-
-    Uses the pre-built CIMT_448ROIs_atlas.nii.gz bundled in the package.
-    Each source voxel is assigned to its atlas ROI via MNI coordinate lookup.
-    Lead field columns are then averaged within each ROI.
-
-    Parameters
-    ----------
-    fwd : mne.Forward
-        Full forward solution (from mne.make_forward_solution).
-    src : mne.SourceSpaces
-        Volume source space (fsaverage-vol-5mm-src.fif).
-    verbose : bool
-        Enable logging.
-
-    Returns
-    -------
-    G_reduced : np.ndarray, shape (n_channels, 448)
-    voxel_labels : np.ndarray, shape (n_sources,), values 0-447 or -1
-    roi_counts : np.ndarray, shape (448,)
+    Averages the X, Y, Z components separately to maintain FREE orientation,
+    which is strictly required by MNE for volume source spaces.
     """
     log = logger if verbose else logging.getLogger(__name__)
 
     atlas_img, _ = _load_cimt_atlas()
     atlas_data = atlas_img.get_fdata().astype(np.int32)
 
-    # Get MNI coordinates of all source voxels
     n_sources = len(src[0]['vertno'])
-    src_rr = src[0]['rr'][src[0]['vertno']] * 1000.0  # m → mm
+    src_rr = src[0]['rr'][src[0]['vertno']] * 1000.0
 
     try:
         trans = src[0]['mri_ras_t']['trans']
     except KeyError:
-        raise ValueError(
-            "Source space missing 'mri_ras_t' transform. "
-            "Ensure it is a proper volume source space."
-        )
+        raise ValueError("Source space missing 'mri_ras_t' transform.")
 
     mni_coords = np.array(
         image.coord_transform(src_rr[:, 0], src_rr[:, 1], src_rr[:, 2], trans)
-    ).T  # (n_sources, 3)
+    ).T
 
-    # Look up atlas label for each source voxel
     vox_coords = _coords_to_voxels(mni_coords, atlas_img)
     voxel_labels = np.full(n_sources, -1, dtype=np.int64)
 
@@ -228,7 +181,6 @@ def reduce_leadfield_to_cimt(fwd, src, verbose=False):
         log.info(f"CIMT reduction: {n_assigned}/{n_sources} voxels assigned")
         log.info(f"  {n_sources - n_assigned} voxels outside atlas (excluded)")
 
-    # Reduce lead field
     G_full = fwd['sol']['data']
     n_channels = G_full.shape[0]
     n_dipoles = G_full.shape[1]
@@ -238,12 +190,10 @@ def reduce_leadfield_to_cimt(fwd, src, verbose=False):
     elif n_dipoles == n_sources:
         has_free_ori = False
     else:
-        raise ValueError(
-            f"Unexpected lead field shape: ({n_channels}, {n_dipoles}) "
-            f"for {n_sources} sources."
-        )
+        raise ValueError(f"Unexpected lead field shape: ({n_channels}, {n_dipoles})")
 
-    G_reduced = np.zeros((n_channels, 448), dtype=np.float32)
+    # We ALWAYS output free orientation (3 cols per ROI) to satisfy MNE volume space requirements
+    G_reduced = np.zeros((n_channels, 448 * 3), dtype=np.float32)
     roi_counts = np.zeros(448, dtype=np.int32)
 
     for k in range(448):
@@ -259,14 +209,17 @@ def reduce_leadfield_to_cimt(fwd, src, verbose=False):
             dipole_indices = np.concatenate([v * 3 + np.arange(3) for v in voxel_indices])
             G_roi = G_full[:, dipole_indices]
             G_roi_reshaped = G_roi.reshape(n_channels, n_vox, 3)
-            voxel_norms = np.linalg.norm(G_roi_reshaped, axis=2)
-            G_reduced[:, k] = voxel_norms.mean(axis=1)
+            # Average the X, Y, Z components separately across voxels in the ROI
+            G_roi_avg = G_roi_reshaped.mean(axis=1)  # (n_channels, 3)
+            G_reduced[:, k*3 : k*3+3] = G_roi_avg
         else:
-            G_reduced[:, k] = G_full[:, mask].mean(axis=1)
+            # Fallback if original was fixed: tile to 3 orientations
+            G_roi_avg = G_full[:, mask].mean(axis=1)
+            G_reduced[:, k*3 : k*3+3] = np.tile(G_roi_avg[:, None], (1, 3))
 
     if verbose:
         empty_rois = np.sum(roi_counts == 0)
-        log.info(f"Reduced lead field: ({n_channels}, 448)")
+        log.info(f"Reduced lead field: ({n_channels}, {448 * 3})")
         if empty_rois > 0:
             log.warning(f"  {empty_rois} ROIs have no source voxels assigned")
 
@@ -290,14 +243,6 @@ def lcmv_beamformer_cimt(
 ):
     """
     LCMV beamformer with CIMT-reduced source space (448 ROIs).
-
-    Identical to lcmv_beamformer() except the forward model is reduced
-    to 448 ROI columns before make_lcmv(). Output stc.data is (448, T).
-
-    Returns
-    -------
-    metadata : dict
-        Same structure as lcmv_beamformer(), with 'source_space': 'CIMT_448_ROIs'.
     """
     fsaverage_dir = Path(fsaverage_dir)
     output_dir = Path(output_dir)
@@ -308,23 +253,19 @@ def lcmv_beamformer_cimt(
     log.info(f"LCMV-CIMT Source Estimation: {subject_id} - {task}")
     log.info(f"{'=' * 60}")
 
-    # Validate resources
     bem_file, src_file = validate_fsaverage(fsaverage_dir)
 
-    # Coregistration (unchanged)
     log.info("Running coregistration...")
     trans_file = output_dir / 'fsaverage-trans.fif'
     trans, coreg_errors = _run_coregistration(
         input, ch_pos, 'fsaverage', fsaverage_dir, trans_file, log
     )
 
-    # Source space
     log.info("Loading source space...")
     src = mne.read_source_spaces(src_file)
     n_active = len(src[0]['vertno'])
     log.info(f"Source space: {n_active} active sources")
 
-    # Forward solution (full, unchanged)
     log.info("Computing forward solution...")
     fwd_file = output_dir / 'fsaverage-vol-eeg-fwd.fif'
     bem = mne.read_bem_solution(bem_file)
@@ -334,47 +275,37 @@ def lcmv_beamformer_cimt(
     )
     mne.write_forward_solution(fwd_file, fwd, overwrite=True)
 
-    # ── Reduce to 448 CIMT ROIs ──
     log.info("Reducing lead field to 448 CIMT ROIs...")
     G_reduced, voxel_labels, roi_counts = reduce_leadfield_to_cimt(
         fwd=fwd, src=src, verbose=True,
     )
 
-    # ── Update ALL forward solution metadata to match reduced dimensions ──
-    # MNE's _prepare_beamformer_input reads fwd['source_nn'] (not fwd['sol']['source_nn'])
-    # and checks fwd['source_ori'] to determine n_orient.
-    # Since we collapsed 3 dipoles/voxel into 1 scalar/ROI, we MUST set FIXED orientation.
+    # ── Update forward solution metadata ──
     n_roi = 448
-
-    # 1. Lead field matrix and column count
+    n_cols = n_roi * 3
+    
     fwd['sol']['data'] = G_reduced
-    fwd['sol']['ncol'] = n_roi
-
-    # 2. Source count
+    fwd['sol']['ncol'] = n_cols
     fwd['nsource'] = n_roi
-
-    # 3. CRITICAL: Change orientation from FREE (2) to FIXED (1)
-    # Without this, MNE computes n_orient=3, divides 448//3=149, and crashes
-    fwd['source_ori'] = FIFF.FIFFV_MNE_FIXED_ORI
-
-    # 4. Source normals — MNE reads this from fwd['source_nn'], NOT fwd['sol']['source_nn']
-    fwd['source_nn'] = np.tile([0.0, 0.0, 1.0], (n_roi, 1)).astype(np.float32)
-
-    # 5. Vertex indices
+    
+    # Keep FREE orientation (default for volume spaces, required by MNE)
+    # Source normals for free orientation: X, Y, Z repeated for each ROI
+    fwd['source_nn'] = np.tile(np.eye(3), (n_roi, 1)).astype(np.float32)
+    
     fwd['src'][0]['vertno'] = np.arange(n_roi, dtype=np.int32)
 
-    # Save reduced lead field and voxel mapping
     np.save(output_dir / 'G_cimt_448.npy', G_reduced)
     np.save(output_dir / 'cimt_voxel_labels.npy', voxel_labels)
 
-    # LCMV beamformer (operates on 448 ROIs)
     log.info("Computing covariance and LCMV filters (448 ROIs)...")
     cov = mne.compute_raw_covariance(
         input, method='oas', picks='eeg', rank=None, n_jobs=n_jobs, verbose=False,
     )
+    
+    # pick_ori='max-power' is now valid because we have 3 distinct orientations per ROI
     filters = mne.beamformer.make_lcmv(
         info=input.info, forward=fwd, data_cov=cov, noise_cov=cov, reg=reg,
-        pick_ori=None,  # FIXED orientation does not support 'max-power'
+        pick_ori='max-power',
         weight_norm='unit-noise-gain',
         reduce_rank=True, rank=None, verbose=False,
     )
@@ -386,7 +317,6 @@ def lcmv_beamformer_cimt(
     stc.save(stc_file, ftype='h5', overwrite=True)
     log.info(f"Saved CIMT source estimate: {stc.data.shape[0]} ROIs × {stc.data.shape[1]} timepoints")
 
-    # Metadata
     metadata = {
         'subject_id': subject_id,
         'task': task,
@@ -425,32 +355,6 @@ def execute_source_estimation_atlas(
 ):
     """
     High-level orchestrator for CIMT-constrained source estimation.
-
-    Drop-in replacement for execute_source_estimation(). Produces
-    (448, T) output directly — no cimt_extraction() needed afterward.
-
-    Parameters
-    ----------
-    project_base : str or Path
-        Root of BIDS-like project.
-    subject_id : str
-        Subject identifier (e.g., 'sub-01').
-    task : str
-        Task name (e.g., 'rest').
-    ica_file_path : str
-        Relative path to cleaned .fif within project_base.
-    fsaverage_dir : str or Path
-        Directory containing fsaverage/ and fsaverage-vol-5mm-src.fif.
-    reg : float
-        LCMV regularization parameter.
-    n_jobs : int
-        Parallel jobs for forward solution.
-    verbose : bool
-        Enable console logging.
-
-    Returns
-    -------
-    metadata : dict
     """
     project_base = Path(project_base)
     package_dir = Path(lcmv_xtra.__file__).parent
