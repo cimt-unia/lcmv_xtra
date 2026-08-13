@@ -20,6 +20,7 @@ import nibabel as nib
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 from nilearn import image
+from mne.io.constants import FIFF
 
 import lcmv_xtra
 from lcmv_xtra.atlas_extraction import _get_mni_coordinates, _coords_to_voxels
@@ -340,12 +341,26 @@ def lcmv_beamformer_cimt(
     )
 
     # ── Update ALL forward solution metadata to match reduced dimensions ──
-    # MNE's _compute_beamformer asserts nn.shape == (n_sources, 3) internally.
-    # Without updating source_nn and vertno, make_lcmv raises AssertionError.
+    # MNE's _prepare_beamformer_input reads fwd['source_nn'] (not fwd['sol']['source_nn'])
+    # and checks fwd['source_ori'] to determine n_orient.
+    # Since we collapsed 3 dipoles/voxel into 1 scalar/ROI, we MUST set FIXED orientation.
     n_roi = 448
+
+    # 1. Lead field matrix and column count
     fwd['sol']['data'] = G_reduced
+    fwd['sol']['ncol'] = n_roi
+
+    # 2. Source count
     fwd['nsource'] = n_roi
-    fwd['sol']['source_nn'] = np.tile([0.0, 0.0, 1.0], (n_roi, 1)).astype(np.float32)
+
+    # 3. CRITICAL: Change orientation from FREE (2) to FIXED (1)
+    # Without this, MNE computes n_orient=3, divides 448//3=149, and crashes
+    fwd['source_ori'] = FIFF.FIFFV_MNE_FIXED_ORI
+
+    # 4. Source normals — MNE reads this from fwd['source_nn'], NOT fwd['sol']['source_nn']
+    fwd['source_nn'] = np.tile([0.0, 0.0, 1.0], (n_roi, 1)).astype(np.float32)
+
+    # 5. Vertex indices
     fwd['src'][0]['vertno'] = np.arange(n_roi, dtype=np.int32)
 
     # Save reduced lead field and voxel mapping
@@ -359,7 +374,8 @@ def lcmv_beamformer_cimt(
     )
     filters = mne.beamformer.make_lcmv(
         info=input.info, forward=fwd, data_cov=cov, noise_cov=cov, reg=reg,
-        pick_ori='max-power', weight_norm='unit-noise-gain',
+        pick_ori=None,  # FIXED orientation does not support 'max-power'
+        weight_norm='unit-noise-gain',
         reduce_rank=True, rank=None, verbose=False,
     )
 
