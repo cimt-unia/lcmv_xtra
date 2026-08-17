@@ -195,9 +195,13 @@ def lcmv_beamformer_epochs(
 
     # 3. Compute covariance PROPERLY on epochs (avoids concatenation boundary artifacts)
     log.info("Computing covariance from epochs (per-epoch averaging)...")
+
+
+    epochs_eeg = epochs.copy().pick('eeg')
     cov = mne.compute_covariance(
-        epochs, method='oas', picks='eeg', rank=None, n_jobs=n_jobs, verbose=False
+    epochs_eeg, method='oas', rank=None, n_jobs=n_jobs, verbose=False
     )
+
 
     # 4. Make LCMV filters
     log.info("Computing LCMV filters...")
