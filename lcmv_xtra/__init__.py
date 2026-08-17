@@ -9,7 +9,7 @@ from .utils import download_fsaverage
 from .atlas_extraction import gt_extraction, difumo_extraction
 from .cimt_atlas import cimt_extraction
 
-# Tensor / ML Aggregation (Standard - Atlas based)
+# Tensor / ML Aggregation (Standard - Atlas-based)
 from .tensor import (
     make_subject_list,
     scan_eeg_paths,      
@@ -23,11 +23,12 @@ from .tensor_epochs import (
     save_study_tensor_epochs,
 )
 
-# Tensor / ML Aggregation (Custom - MNI coordinate based)
+# Tensor / ML Aggregation (Custom - MNI coordinate-based)
 from .custom_tensor import (
     assemble_custom_tensor,
     extract_custom_roi_time_courses,
 )
+from .custom_tensor_epochs import assemble_custom_tensor_epochs
 
 # Atlas-Constrained Tensor Assembly (CIMT Before Inverse)
 from .atlas_tensor import assemble_atlas_tensor
@@ -86,8 +87,9 @@ __all__ = [
     # Tensor / ML Aggregation (Custom MNI Coordinates)
     "assemble_custom_tensor",
     "extract_custom_roi_time_courses",
+    "assemble_custom_tensor_epochs",
 
-    # Epoched Source Estimation (Custom MNI Coordinates)
+    # Tiral Source Estimation
     "execute_variable_tensor",
     
     # Connectivity Analysis
