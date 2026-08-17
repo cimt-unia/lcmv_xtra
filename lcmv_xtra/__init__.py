@@ -4,6 +4,7 @@ from ._config import *
 
 # Main workflow functions 
 from .source_estimation import execute_source_estimation
+from .source_estimation_epochs import execute_source_estimation_epochs
 from .utils import download_fsaverage  
 from .atlas_extraction import gt_extraction, difumo_extraction
 from .cimt_atlas import cimt_extraction
@@ -14,6 +15,12 @@ from .tensor import (
     scan_eeg_paths,      
     save_study_tensor,
     assemble_tensor       
+)
+
+# Tensor / ML Aggregation (Epoch-based - 4D)
+from .tensor_epochs import (
+    assemble_tensor_epochs,
+    save_study_tensor_epochs,
 )
 
 # Tensor / ML Aggregation (Custom - MNI coordinate based)
@@ -58,6 +65,7 @@ __version__ = "0.1.0"
 __all__ = [
     # Core Pipeline
     "execute_source_estimation",
+    "execute_source_estimation_epochs",
     "download_fsaverage", 
     
     # Atlas Extractions
@@ -70,6 +78,10 @@ __all__ = [
     "scan_eeg_paths",      
     "save_study_tensor",
     "assemble_tensor",     
+    
+    # Tensor / ML Aggregation (Epoch-based 4D)
+    "assemble_tensor_epochs",
+    "save_study_tensor_epochs",
     
     # Tensor / ML Aggregation (Custom MNI Coordinates)
     "assemble_custom_tensor",
@@ -102,5 +114,4 @@ __all__ = [
 
     # Tensor / ML Aggregation (CIMT Atlas-Before-Inverse)
     "assemble_atlas_tensor",
-
 ]
