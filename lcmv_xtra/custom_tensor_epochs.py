@@ -266,3 +266,43 @@ def assemble_custom_tensor_epochs(
             all_subject_data, task_name, output_dir, target_sfreq=target_sfreq,
         )
     return None
+
+'''
+import lcmv_xtra as lx
+from pathlib import Path
+
+FS_DIR = Path("/mnt/movement/users/jaizor/xtra/derivatives/_fs")
+OUTPUT_DIR = Path("/mnt/movement/users/jaizor/xtra/notebooks/EEG/UNI/Epochs/data")
+PROJECT_BASE = Path("/mnt/movement/users/jaizor/xtra/derivatives/eeg/uni")
+EPOCHS_DIR = PROJECT_BASE / "eeg_epochs"
+
+# Define your custom ROIs as MNI coordinates
+ROI_COORDINATES = {
+    "STN_L": [-11.89, -14.51, -6.40],
+    "STN_R": [12.53, -13.97, -6.57],
+    "M1_L":  [-38, -24, 58],
+    "M1_R":  [38, -24, 58],
+    "SMA":   [0, -10, 65],
+}
+
+df = lx.scan_eeg_paths(EPOCHS_DIR, pattern="*_pre_raw.fif")
+df = df[~df['subject_id'].str.contains("sub-01")]
+df['subject_id'] = df['fif_path'].apply(
+    lambda p: Path(p).stem.split('_sm_eeg')[0]
+)
+
+lx.assemble_custom_tensor_epochs(
+    data_index=df,
+    fs_dir=FS_DIR,
+    output_dir=OUTPUT_DIR,
+    roi_coordinates=ROI_COORDINATES,
+    task_name="sm_pre",
+    project_base=PROJECT_BASE,
+    epoch_duration=2.5,
+    radius_mm=5.0,
+    mode="sphere",
+    target_sfreq=250.0,
+    n_jobs=-1,
+    verbose=True,
+)
+'''
