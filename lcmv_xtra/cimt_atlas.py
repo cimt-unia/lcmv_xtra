@@ -135,11 +135,13 @@ def _extract_stn_ts(stc, src, n_times, logger=None):
 
 
 
+
 # =============================================================================
 # MAIN UNIFIED FUNCTION
 # =============================================================================
 
 def cimt_extraction(subject_output_dir, fsaverage_dir, 
+                    stc_filename='source_estimate_LCMV.h5',
                     stn_radius_mm=5.0, verbose=False):
     """
     Run the full CIMT Atlas extraction (448 ROIs).
@@ -147,9 +149,13 @@ def cimt_extraction(subject_output_dir, fsaverage_dir,
     Parameters
     ----------
     subject_output_dir : str or Path
-        Path to subject output (contains source_estimate_LCMV.h5).
+        Path to subject output directory.
     fsaverage_dir : str or Path
         Path to fsaverage resources. MUST contain 'fsaverage-vol-5mm-src.fif'.
+    stc_filename : str
+        Name of the source estimate file within subject_output_dir.
+        Defaults to 'source_estimate_LCMV.h5' for backward compatibility.
+        Use 'source_estimate_LCMV_epoch_XXX.h5' for epoch-based extraction.
     stn_radius_mm : float
         Radius for STN voxel averaging (default 5.0).
     verbose : bool
@@ -177,7 +183,7 @@ def cimt_extraction(subject_output_dir, fsaverage_dir,
     log.info("="*60)
     
     # 1. Validate Inputs
-    stc_file = subject_output_dir / "source_estimate_LCMV.h5"
+    stc_file = subject_output_dir / stc_filename
     src_file = fsaverage_dir / "fsaverage-vol-5mm-src.fif"
     
     if not stc_file.exists():
