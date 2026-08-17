@@ -43,7 +43,7 @@ from .viz import (
 
 from .coreg import plot_coregistration
 
-from .epoch_tensor import execute_epoch_tensor
+from .tensor_variable import execute_variable_tensor
 
 from .source_estimation_atlas import (
     execute_source_estimation_atlas,
@@ -76,7 +76,7 @@ __all__ = [
     "extract_custom_roi_time_courses",
 
     # Epoched Source Estimation (Custom MNI Coordinates)
-    "execute_epoch_tensor",
+    "execute_variable_tensor",
     
     # Connectivity Analysis
     "compute_gt_motor_connectivity",
