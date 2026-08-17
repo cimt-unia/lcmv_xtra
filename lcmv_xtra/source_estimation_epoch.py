@@ -1,11 +1,11 @@
-# lcmv_xtra/source_estimation_epoch.py
+# lcmv_xtra/source_estimation_epochs.py
 import mne
 import json
 import logging
 import lcmv_xtra
 import numpy as np
 from pathlib import Path
-from typing import Dict, Tuple, Any, Optional
+from typing import Dict, Tuple, Optional, List
 from .utils import parse_gpsc
 
 # MNE logging
@@ -16,20 +16,19 @@ _BEL_CHANNEL_MAP = {str(i): f'E{i}' for i in range(1, 281)}
 _BEL_CHANNEL_MAP['REF CZ'] = 'Cz'
 _REQUIRED_FIDUCIALS = ['FidNz', 'FidT9', 'FidT10']
 
+
 def _setup_logger(subject_id: str, task: str, output_dir: Path, verbose: bool = False) -> logging.Logger:
     """Setup per-subject logger with file and optional console output."""
     logger = logging.getLogger(f'lcmv.{subject_id}.{task}')
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
     logger.handlers.clear()
     
-    # File handler 
     log_file = output_dir / f'{subject_id}_{task}_processing.log'
     fh = logging.FileHandler(log_file, mode='w')
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     logger.addHandler(fh)
     
-    # Console handler 
     if verbose:
         ch = logging.StreamHandler()
         ch.setLevel(logging.INFO)
@@ -38,150 +37,104 @@ def _setup_logger(subject_id: str, task: str, output_dir: Path, verbose: bool = 
     
     return logger
 
-def load_subject(ica_file_path: Path, gpsc_file_path: Path, subject_id: Optional[str] = None, logger: Optional[logging.Logger] = None) -> Tuple[mne.io.Raw, Dict]:
-    """
-    Load and preprocess subject data for source estimation.
-    """
+
+def load_subject(ica_file_path: Path, gpsc_file_path: Path, 
+                 subject_id: Optional[str] = None, 
+                 logger: Optional[logging.Logger] = None) -> Tuple[mne.io.Raw, Dict]:
+    """Load and preprocess subject data (identical to continuous version)."""
     log = logger or logging.getLogger(__name__)
     ica_file = Path(ica_file_path)
     gpsc_file = Path(gpsc_file_path)
     
-    # Validate files
     if not ica_file.exists():
         raise FileNotFoundError(f"ICA file not found: {ica_file}")
     if not gpsc_file.exists():
         raise FileNotFoundError(f"GPSC file not found: {gpsc_file}")
 
-    # Load raw data
     raw = mne.io.read_raw_fif(ica_file, preload=True)
     sfreq = raw.info['sfreq']
     duration_min = raw.n_times / sfreq / 60
     subject_str = f" ({subject_id})" if subject_id else ""
     log.info(f"Loaded data: {duration_min:.1f}min @ {sfreq}Hz{subject_str}")
 
-    # Rename channels
     existing_channels = set(raw.info['ch_names'])
-    valid_channel_map = {
-        old: new for old, new in _BEL_CHANNEL_MAP.items()
-        if old in existing_channels
-    }
-    
+    valid_channel_map = {old: new for old, new in _BEL_CHANNEL_MAP.items() if old in existing_channels}
     if valid_channel_map:
         raw.rename_channels(valid_channel_map)
-        log.debug(f"Renamed {len(valid_channel_map)} channels")
 
-    # Parse and normalize coordinates
     channels = parse_gpsc(gpsc_file)
     if not channels:
         raise ValueError("No valid channels found in .gpsc file")
     
     gpsc_array = np.array([ch[1:4] for ch in channels])
     mean_pos = np.mean(gpsc_array, axis=0)
-    log.debug(f"Original mean position (mm): {mean_pos}")
-    
-    # Normalize to center origin and convert to meters
     channels_normalized = [
         (ch[0], ch[1] - mean_pos[0], ch[2] - mean_pos[1], ch[3] - mean_pos[2]) 
         for ch in channels
     ]
     ch_pos = {ch[0]: np.array(ch[1:4]) / 1000.0 for ch in channels_normalized}
     
-    # Validate fiducials
     missing_fids = [fid for fid in _REQUIRED_FIDUCIALS if fid not in ch_pos]
     if missing_fids:
         raise ValueError(f"Missing required fiducials: {missing_fids}")
 
-    # Create and apply montage
     montage = mne.channels.make_dig_montage(
-        ch_pos=ch_pos,
-        nasion=ch_pos['FidNz'],
-        lpa=ch_pos['FidT9'],
-        rpa=ch_pos['FidT10'],
-        coord_frame='head'
+        ch_pos=ch_pos, nasion=ch_pos['FidNz'], lpa=ch_pos['FidT9'], rpa=ch_pos['FidT10'], coord_frame='head'
     )
     raw.set_montage(montage, on_missing='warn')
     raw = raw.pick(['eeg', 'stim'], exclude=raw.info['bads'])
-    log.info(f"Applied montage with {len(ch_pos)} positions")
 
-    # Handle average reference
     has_avg_ref = any(p['desc'] == 'average' for p in raw.info['projs'])
     if not has_avg_ref:
-        log.debug("Applying average reference projection")
         raw.set_eeg_reference('average', projection=True)
-    
     if not raw.proj:
         raw.apply_proj()
-        log.debug("Applied EEG projections")
 
     log.info("Preprocessing complete")
     return raw, ch_pos
 
+
 def validate_fsaverage(subjects_dir: Path) -> Tuple[Path, Path]:
-    """Validate that subjects_dir contains a valid 'fsaverage' subject."""
+    """Validate fsaverage resources."""
     subjects_dir = Path(subjects_dir)
     fsaverage_dir = subjects_dir / 'fsaverage'
-    
     bem_file = fsaverage_dir / 'bem' / 'fsaverage-5120-5120-5120-bem-sol.fif'
     src_file = subjects_dir / 'fsaverage-vol-5mm-src.fif'
     
     if not (bem_file.exists() and src_file.exists()):
-        raise FileNotFoundError(
-            f"Missing files in {subjects_dir}. Expected:\n"
-            f"  fsaverage/bem/fsaverage-5120-...-bem-sol.fif\n"
-            f"  fsaverage-vol-5mm-src.fif\n"
-            "Run: download_fsaverage('/path/to/derivatives/lcmv')"
-        )
+        raise FileNotFoundError(f"Missing fsaverage files in {subjects_dir}")
     return bem_file, src_file
 
-def _run_coregistration(raw: mne.io.Raw, ch_pos: Dict, subject: str, subjects_dir: Path, trans_file: Path, logger: logging.Logger) -> Tuple[mne.transforms.Transform, Dict]:
+
+def _run_coregistration(raw: mne.io.Raw, ch_pos: Dict, subject: str, 
+                        subjects_dir: Path, trans_file: Path, 
+                        logger: logging.Logger) -> Tuple[mne.transforms.Transform, Dict]:
     """Run enhanced coregistration with ICP and outlier removal."""
     log = logger or logging.getLogger(__name__)
-    
     coreg = mne.coreg.Coregistration(
-        raw.info,
-        subject=subject,
-        subjects_dir=subjects_dir,
-        fiducials={
-            'nasion': ch_pos['FidNz'],
-            'lpa': ch_pos['FidT9'],
-            'rpa': ch_pos['FidT10']
-        }
+        raw.info, subject=subject, subjects_dir=subjects_dir,
+        fiducials={'nasion': ch_pos['FidNz'], 'lpa': ch_pos['FidT9'], 'rpa': ch_pos['FidT10']}
     )
-
-    # Fit fiducials
-    log.debug("Fitting fiducials...")
     coreg.fit_fiducials(verbose=False)
-
-    # Initial ICP
-    log.debug("Running initial ICP with EEG channels...")
     coreg.fit_icp(n_iterations=6, nasion_weight=2.0, verbose=False)
     
-    # Remove outliers
     dists = coreg.compute_dig_mri_distances()
-    n_excluded = np.sum(dists > 5.0/1000)
-    if n_excluded > 0:
-        log.debug(f"Excluding {n_excluded} outlier points (>5mm)")
+    if np.sum(dists > 5.0/1000) > 0:
         coreg.omit_head_shape_points(distance=5.0/1000)
         
-    # Final refinement
-    log.debug("Final ICP refinement...")
     coreg.fit_icp(n_iterations=20, nasion_weight=10.0, verbose=False)
-
-    # Save and compute errors
     trans = coreg.trans
     mne.write_trans(trans_file, trans, overwrite=True)
     
-    dists = coreg.compute_dig_mri_distances() * 1000  # mm
+    dists = coreg.compute_dig_mri_distances() * 1000
     mean_err, median_err, max_err = np.mean(dists), np.median(dists), np.max(dists)
-    log.info(f"Coregistration error (mm) - Mean: {mean_err:.2f}, Median: {median_err:.2f}, Max: {max_err:.2f}")
+    log.info(f"Coreg error (mm) - Mean: {mean_err:.2f}, Median: {median_err:.2f}, Max: {max_err:.2f}")
     
     if mean_err > 5.0:
-        raise RuntimeError(
-            f"mean error {mean_err:.2f}mm exceeds 5mm threshold. "
-            f"Source estimation aborted. Check fiducial digitization and cap placement."
-        )
+        raise RuntimeError(f"Mean error {mean_err:.2f}mm exceeds 5mm threshold.")
     
     return trans, {'mean': mean_err, 'median': median_err, 'max': max_err}
+
 
 def lcmv_beamformer_epochs(
     raw: mne.io.Raw,
@@ -191,13 +144,16 @@ def lcmv_beamformer_epochs(
     subject_id: str,
     task: str,
     epoch_duration: float = 2.0,
-    epoch_overlap: float = 0.0,
     reg: float = 0.05,
     n_jobs: int = 1,
     verbose: bool = False
 ) -> Dict:
     """
-    Run epoch-based LCMV source estimation pipeline.
+    Run purely epoch-based LCMV source estimation.
+    
+    Cuts continuous (concatenated) data into non-overlapping epochs,
+    computes covariance properly across epochs (not on continuous trace),
+    and applies filters using apply_lcmv_epochs.
     """
     fsaverage_dir = Path(fsaverage_dir)
     output_dir = Path(output_dir)
@@ -208,65 +164,42 @@ def lcmv_beamformer_epochs(
     log.info(f"LCMV Epoch Source Estimation: {subject_id} - {task}")
     log.info(f"{'='*60}")
 
-    # Validate and get resource paths
+    # 1. Coregistration & Forward (computed once on full info)
     bem_file, src_file = validate_fsaverage(fsaverage_dir)
-
-    # Coregistration
-    log.info("Running coregistration...")
     trans_file = output_dir / 'fsaverage-trans.fif'
-    trans, coreg_errors = _run_coregistration(
-        raw, ch_pos, 'fsaverage', fsaverage_dir, trans_file, log
-    )
-
-    # Source space
-    log.info("Loading source space...")
+    trans, coreg_errors = _run_coregistration(raw, ch_pos, 'fsaverage', fsaverage_dir, trans_file, log)
+    
     src = mne.read_source_spaces(src_file)
-    n_active = len(src[0]['vertno'])
-    log.info(f"Source space: {n_active} active sources")
-
-    # Forward solution
-    log.info("Computing forward solution...")
     fwd_file = output_dir / 'fsaverage-vol-eeg-fwd.fif'
     bem = mne.read_bem_solution(bem_file)
     fwd = mne.make_forward_solution(
-        raw.info, trans=trans, src=src, bem=bem,
-        eeg=True, mindist=5.0, n_jobs=n_jobs
+        raw.info, trans=trans, src=src, bem=bem, eeg=True, mindist=5.0, n_jobs=n_jobs
     )
     mne.write_forward_solution(fwd_file, fwd, overwrite=True)
 
-    # 1. Create Epochs from Raw
-    log.info(f"Creating fixed-length epochs (duration={epoch_duration}s, overlap={epoch_overlap}s)...")
-    events = mne.make_fixed_length_events(
-        raw, 
-        duration=epoch_duration, 
-        overlap=epoch_overlap,
-        first_samp=True
-    )
-    # tmax is inclusive in MNE, so we subtract 1 sample to get exactly epoch_duration
-    tmax = epoch_duration - (1.0 / raw.info['sfreq'])
+    # 2. Re-epoch the concatenated continuous data
+    sfreq = raw.info['sfreq']
+    log.info(f"Cutting continuous data into {epoch_duration}s non-overlapping epochs...")
+    events = mne.make_fixed_length_events(raw, duration=epoch_duration, overlap=0.0)
+    
+    # tmax is inclusive; subtract 1 sample to get exact epoch_duration
+    tmax = epoch_duration - (1.0 / sfreq)
     epochs = mne.Epochs(
-        raw, 
-        events, 
-        event_id=None, 
-        tmin=0.0, 
-        tmax=tmax,
-        baseline=None, 
-        preload=True, 
-        proj=True,
-        reject_by_annotation=False # Keep all epochs unless explicitly rejected
+        raw, events, event_id=None, tmin=0.0, tmax=tmax,
+        baseline=None, preload=True, proj=True
     )
-    log.info(f"Created {len(epochs)} valid epochs.")
-
+    log.info(f"Created {len(epochs)} epochs.")
+    
     if len(epochs) == 0:
-        raise RuntimeError("No epochs were created. Check epoch_duration and raw data length.")
+        raise RuntimeError("No epochs created. Check epoch_duration vs data length.")
 
-    # 2. Compute Covariance from Epochs
-    log.info("Computing covariance from epochs...")
+    # 3. Compute covariance PROPERLY on epochs (avoids concatenation boundary artifacts)
+    log.info("Computing covariance from epochs (per-epoch averaging)...")
     cov = mne.compute_covariance(
         epochs, method='oas', picks='eeg', rank=None, n_jobs=n_jobs, verbose=False
     )
 
-    # 3. Make LCMV Filters
+    # 4. Make LCMV filters
     log.info("Computing LCMV filters...")
     filters = mne.beamformer.make_lcmv(
         info=epochs.info, forward=fwd, data_cov=cov, noise_cov=cov, reg=reg,
@@ -274,44 +207,40 @@ def lcmv_beamformer_epochs(
         reduce_rank=True, rank=None, verbose=False
     )
 
-    # 4. Apply LCMV to Epochs
+    # 5. Apply LCMV to epochs
     log.info("Applying LCMV beamformer to epochs...")
-    stcs = mne.beamformer.apply_lcmv_epochs(epochs=epochs, filters=filters)
+    stcs: List[mne.SourceEstimate] = mne.beamformer.apply_lcmv_epochs(
+        epochs=epochs, filters=filters
+    )
     
-    if not stcs:
-        raise RuntimeError("apply_lcmv_epochs returned an empty list.")
-
-    # 5. Save Epoch STCs
+    # 6. Save each epoch STC individually
     log.info(f"Saving {len(stcs)} epoch source estimates...")
     for i, stc in enumerate(stcs):
         stc_file = output_dir / f'source_estimate_LCMV_epoch_{i:03d}.h5'
         stc.save(stc_file, ftype='h5', overwrite=True)
-        
-    log.info(f"Saved {len(stcs)} epoch STCs. Shape per epoch: {stcs[0].data.shape[0]} × {stcs[0].data.shape[1]}")
 
     # Metadata
     metadata = {
         'subject_id': subject_id,
         'task': task,
-        'sfreq_hz': float(epochs.info['sfreq']),
-        'duration_min': float(raw.n_times / raw.info['sfreq'] / 60),
+        'sfreq_hz': float(sfreq),
+        'epoch_duration_sec': float(epoch_duration),
+        'n_epochs': len(stcs),
         'n_sources': int(stcs[0].data.shape[0]),
         'n_timepoints_per_epoch': int(stcs[0].data.shape[1]),
-        'n_epochs': int(len(stcs)),
-        'epoch_duration_sec': float(epoch_duration),
-        'epoch_overlap_sec': float(epoch_overlap),
         'coreg_mean_error_mm': float(coreg_errors['mean']),
         'regularization': reg,
+        'covariance_method': 'epoch_averaged_oas',
         'subject_output': str(output_dir),
         'fsaverage_dir': str(fsaverage_dir)
     }
     with open(output_dir / 'pipeline_metadata.json', 'w') as f:
         json.dump(metadata, f, indent=2)
 
-    log.info(f"Epoch-based source estimation complete: {output_dir}")
+    log.info(f"Epoch source estimation complete: {output_dir}")
     log.info(f"{'='*60}\n")
-    
     return metadata
+
 
 def execute_source_estimation_epochs(
     project_base: Path,
@@ -320,14 +249,11 @@ def execute_source_estimation_epochs(
     ica_file_path: str,
     fsaverage_dir: Path,
     epoch_duration: float = 2.0,
-    epoch_overlap: float = 0.0,
     reg: float = 0.05,
     n_jobs: int = 1,
     verbose: bool = False
 ) -> Dict:
-    """
-    High-level orchestrator for epoch-based LCMV source estimation.
-    """
+    """High-level orchestrator for epoch-based LCMV source estimation."""
     project_base = Path(project_base)
     package_dir = Path(lcmv_xtra.__file__).parent
     gpsc_full_path = package_dir / 'data' / 'bel_280' / 'ghw280_from_egig.gpsc'
@@ -338,24 +264,35 @@ def execute_source_estimation_epochs(
     ica_full_path = project_base / ica_file_path
     output_dir = project_base / 'derivatives' / 'lcmv' / f'{subject_id}_{task}_epochs'
 
-    # Load data without logging (logging handled in lcmv_beamformer_epochs)
     raw, ch_pos = load_subject(
-        ica_file_path=ica_full_path,
-        gpsc_file_path=gpsc_full_path,
-        subject_id=subject_id,
-        logger=None
+        ica_file_path=ica_full_path, gpsc_file_path=gpsc_full_path,
+        subject_id=subject_id, logger=None
     )
     
     return lcmv_beamformer_epochs(
-        raw=raw,
-        ch_pos=ch_pos,
-        fsaverage_dir=fsaverage_dir,
-        output_dir=output_dir,
-        subject_id=subject_id,
-        task=task,
-        epoch_duration=epoch_duration,
-        epoch_overlap=epoch_overlap,
-        reg=reg,
-        n_jobs=n_jobs,
-        verbose=verbose
+        raw=raw, ch_pos=ch_pos, fsaverage_dir=fsaverage_dir, output_dir=output_dir,
+        subject_id=subject_id, task=task, epoch_duration=epoch_duration,
+        reg=reg, n_jobs=n_jobs, verbose=verbose
     )
+
+'''
+import lcmv_xtra as lx
+from pathlib import Path
+
+# Define your paths
+PROJECT_BASE = Path("/path/to/project")
+FS_DIR = Path("/path/to/fsaverage")
+
+# Run epoch-based source estimation with 2-second non-overlapping windows
+metadata = lx.execute_source_estimation_epochs(
+    project_base=PROJECT_BASE,
+    subject_id="sub-01",
+    task="rest",
+    ica_file_path="sub-01/ses-01/eeg/sub-01_rest_cleaned.fif",
+    fsaverage_dir=FS_DIR,
+    epoch_duration=2.0,   # ← Specify epoch length here (seconds)
+    reg=0.05,
+    n_jobs=1,
+    verbose=True
+)
+'''
