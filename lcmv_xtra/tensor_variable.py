@@ -1,4 +1,4 @@
-# lcmv_xtra/epoch_tensor.py
+# lcmv_xtra/tensor_variable.py
 """
 Epoched LCMV Source Estimation
 ==============================
