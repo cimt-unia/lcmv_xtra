@@ -177,7 +177,7 @@ def _downsample_roi_time_courses(
     return resampled, target_sfreq
 
 
-def execute_epoch_tensor(
+def execute_variable_tensor(
     project_base: Union[Path, str],
     subject_id: str,
     task: str,
