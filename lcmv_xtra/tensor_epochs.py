@@ -1,4 +1,6 @@
 # lcmv_xtra/tensor_epochs.py
+# (Subjects, ROIs, Epochs, Time)
+
 import os
 import logging
 import numpy as np
