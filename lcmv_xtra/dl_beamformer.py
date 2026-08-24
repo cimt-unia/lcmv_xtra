@@ -51,18 +51,19 @@ logger = logging.getLogger(__name__)
 
 def get_best_device():
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
+    
 class EarlyStopping:
-    def __init__(self, patience=PATIENCE):
+    def __init__(self, patience=PATIENCE, min_delta=0.05):
         self.patience = patience
+        self.min_delta = min_delta  # Minimum improvement required to reset counter
         self.counter = 0
         self.best_score = None
         self.early_stop = False
         self.best_weights = None
 
     def __call__(self, val_loss, weights):
-        if self.best_score is None or val_loss < self.best_score:
+        # Must improve by at least min_delta to be considered "improving"
+        if self.best_score is None or val_loss < (self.best_score - self.min_delta):
             self.best_score = val_loss
             self.best_weights = weights.detach().clone()
             self.counter = 0
@@ -70,7 +71,6 @@ class EarlyStopping:
             self.counter += 1
             if self.counter >= self.patience:
                 self.early_stop = True
-
 
 class NeuralSpatialFilter(nn.Module):
     """Physics-constrained neural beamformer. One trainable matrix W."""
