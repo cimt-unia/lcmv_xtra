@@ -23,7 +23,6 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 
-
 dependencies = [
     "mne>=1.6",
     "nilearn>=0.10",
@@ -33,7 +32,18 @@ dependencies = [
     "numpy>=1.21",
     "scipy",
     "mne-connectivity",
-    "k3d"
+    "k3d",
+]
+
+[project.optional-dependencies]
+# Deep learning neural beamformer (dl_beamformer.py)
+ml = [
+    "torch>=2.0",
+    "schedulefree>=1.0",
+]
+# Install everything for full functionality
+all = [
+    "lcmv_xtra[ml]",
 ]
 
 [tool.setuptools.packages.find]
@@ -47,4 +57,3 @@ lcmv_xtra = ["data/**/*"]
 [project.urls]
 Homepage = "https://github.com/cimt-unia/lcmv_xtra"
 Repository = "https://github.com/cimt-unia/lcmv_xtra.git"
-
