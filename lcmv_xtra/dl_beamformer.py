@@ -48,7 +48,7 @@ LOG_INTERVAL = 500
 FINITE_EPS = 1e-8
 VAR_LOSS_WEIGHT = 0.1
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+
 logger = logging.getLogger(__name__)
 
 
