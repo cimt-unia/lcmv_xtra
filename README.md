@@ -1,184 +1,202 @@
 # LCMV Source Reconstruction
 
-Linearly Constrained Minimum Variance Beamformer is a spatial filtering technique used for source reconstruction in EEG and MEG data, designed to estimate neural activity from sensor measurements. It operates by scanning a grid of predefined source locations in the brain and computing weights for each location to enhance signals from the target region while suppressing noise and signals from other areas. 
+Linearly Constrained Minimum Variance (LCMV) beamforming for high-density EEG source reconstruction. This library provides a fully automated pipeline optimized for the BEL 280-channel system, featuring atlas-constrained inverse modeling, physics-informed neural beamforming, and batch-ready tensor assembly.
 
+<br>
 
-#### Details
+#### Key Features
 
-- **BEL 280 coregistration** using bundled `.gpsc` digitized electrode coordinates  
-- **Atlas-based time course extraction**: CIMT(448 ROIs), DiFuMo (512 components) and Glasser+Tian (414 ROIs)  
-- **Fully automated `fsaverage` setup** — no manual downloads required  
-- **Clean, minimal output** by default (production-ready)  
-- **Batch-ready** for multi-subject processing  
-- **Self-contained**: All data files (`.gpcc`, atlas templates) bundled in the package  
-- **WPLI connectivity analysis**: Motor-basal-executive networks for both atlases
+- **BEL 280 Coregistration**: Automated alignment using bundled `.gpsc` digitized electrode coordinates with ICP refinement and outlier rejection.
+- **Three Source Estimation Strategies**:
+  - *Standard*: Full volumetric LCMV + post-hoc atlas extraction.
+  - *Atlas-Constrained*: Forward model reduced to 448 CIMT ROIs *before* inversion (prevents intra-ROI cancellation).
+  - *Neural (PyTorch)*: Physics-constrained autoencoder that refines analytical LCMV weights via reconstruction + variance loss.
+- **Multi-Atlas Support**: CIMT Unified (448 ROIs), Glasser+Tian (414 ROIs), DiFuMo (512 components), and custom MNI coordinates.
+- **Batch Tensor Assembly**: Parallel processing for multi-subject studies with automatic resampling and stacking into 3D/4D tensors.
+- **Connectivity Analysis**: WPLI2-debiased spectral connectivity for motor-basal-executive networks.
+- **Self-Contained**: All atlas templates, channel montages, and fsaverage setup utilities bundled in the package.
 
 > **Note**: Optimized for BEL 280-channel EEG with `fsaverage`, but adaptable to other high-density setups.
 
+<br>
 
----
+## Installation
 
-
-## 📦 Installation
-
-Install directly from GitHub:
-
+### Core (Analytical Pipelines Only)
 ```bash
-pip install git+https://github.com/cimt-unia/lcmv_xtra.git  
+pip install git+https://github.com/cimt-unia/lcmv_xtra.git
 ```
 
-Or in Jupyter/Colab:
+### With Neural Beamformer Support
+The neural beamformer requires PyTorch and is installed as an optional dependency:
+```bash
+pip install "git+https://github.com/cimt-unia/lcmv_xtra.git[ml]"
+```
+
+### Jupyter / Colab
 ```python
-!python -m pip install --user git+https://github.com/cimt-unia/lcmv_xtra.git   
+!pip install --user "git+https://github.com/cimt-unia/lcmv_xtra.git[ml]"
 ```
 
-
----
+<br>
 
 ## Quick Start
 
-### Step 1: One-time project setup
+### Step 1: One-Time Project Setup
 ```python
 from lcmv_xtra import download_fsaverage
 
 fs_dir = '/path/to/fsaverage'
-download_fsaverage(fs_dir)  
+download_fsaverage(fs_dir)  # Downloads anatomy, generates BEM + 5mm volume source space
 ```
 
-### Step 2: Single-subject pipeline
+### Step 2: Source Estimation
+
+Choose the strategy that best fits your analysis:
+
+#### Option A: Atlas-Constrained LCMV (Recommended)
+Reduces the forward model to 448 CIMT ROIs *before* computing beamformer weights. Output is directly `(448, T)` — no post-hoc extraction needed.
 ```python
-from lcmv_xtra import execute_source_estimation, difumo_extraction, gt_extraction
+from lcmv_xtra import execute_source_estimation_atlas
 
+metadata = execute_source_estimation_atlas(
+    project_base='/path/to/bids_root',
+    subject_id='sub-01',
+    task='move',
+    ica_file_path='derivatives/ica/sub-01_task-move_ica.fif',
+    fsaverage_dir=fs_dir,
+)
+# Output: source_estimate_LCMV.h5 with shape (448, n_times)
+```
 
-# Source Estimation
+#### Option B: Neural Beamformer (PyTorch)
+Refines analytical LCMV weights using a physics-constrained autoencoder. Requires `[ml]` install.
+```python
+from lcmv_xtra import execute_source_estimation_atlas_pytorch
+
+metadata = execute_source_estimation_atlas_pytorch(
+    project_base='/path/to/bids_root',
+    subject_id='sub-01',
+    task='move',
+    ica_file_path='derivatives/ica/sub-01_task-move_ica.fif',
+    fsaverage_dir=fs_dir,
+    nn_epochs=20000,  # Early stopping enabled (patience=10)
+)
+# Saves both W_analytical.npy and W_neural_learned.npy for comparison
+```
+
+#### Option C: Standard LCMV + Post-Hoc Extraction
+Full volumetric source estimation followed by atlas-based time course extraction.
+```python
+from lcmv_xtra import execute_source_estimation, cimt_extraction
+
 metadata = execute_source_estimation(
     project_base='/path/to/bids_root',
     subject_id='sub-01',
     task='move',
     ica_file_path='derivatives/ica/sub-01_task-move_ica.fif',
-    fsaverage_dir=fs_dir
+    fsaverage_dir=fs_dir,
 )
-
-
-
-# option 1: CIMT Unified Atlas Extraction (448 ROIs)
-
-'''
-Combines:
-  1. Glasser + Tian (414 ROIs)
-  2. Nettekoven (32 ROIs)
-  3. Custom STN (2 ROIs)
-'''
-
-from lcmv_xtra.cimt_atlas import cimt_extraction
 
 cimt_tc, cimt_labels = cimt_extraction(
     subject_output_dir=metadata['subject_output'],
     fsaverage_dir=metadata['fsaverage_dir'],
-    verbose=True
 )
-
-# option 2: Glasser & Tian Atlas Extraction
-gt_tc, _ = gt_extraction(
-    subject_output_dir=metadata['subject_output'],
-    global_subjects_dir=metadata['fsaverage_dir']
-)
-
-# option 3: DiFuMo Atlas Extraction
-difumo_tc, _ = difumo_extraction(
-    subject_output_dir=metadata['subject_output'],
-    global_subjects_dir=metadata['fsaverage_dir']
-)
-
 ```
 
-### Step 3: WPLI Connectivity
-
-#### Create your epochs (any method you prefer)
+### Step 3: Batch Tensor Assembly
+Process multiple subjects in parallel and stack into a single tensor:
 ```python
-# Example: Load pre-computed phase-based epochs
-import numpy as np
-epochs_data = np.load('Sbj001.npz')['inphase_epochs']  # (n_epochs, n_rois, n_times)
+import lcmv_xtra as lx
+
+df = lx.scan_eeg_paths('/path/to/cleaned/', pattern="*_rest_cleaned.fif")
+
+# Atlas-constrained tensor (448 ROIs, no post-hoc extraction)
+lx.assemble_atlas_tensor(df, fs_dir, output_dir, task_name="rest", n_jobs=-1)
+
+# Or standard tensor with post-hoc CIMT extraction
+lx.assemble_tensor(df, fs_dir, output_dir, task_name="rest", n_jobs=-1)
 ```
 
-#### Compute connectivity matrices
+### Step 4: Connectivity Analysis
 ```python
-from lcmv_xtra import (
-    compute_cimt_full_connectivity,
-    compute_gt_motor_connectivity,
-    compute_difumo_connectivity
-)
+from lcmv_xtra import compute_cimt_full_connectivity, compute_cimt_motor_connectivity
 
-# CIMT Unified Atlas: Full 448×448 connectivity matrix
-cimt_full_conn = compute_cimt_full_connectivity(cimt_tc, band_name="beta")
+# Full 448×448 connectivity matrix
+full_conn = compute_cimt_full_connectivity(cimt_tc, band_name="beta")
 
-
-# Glasser+Tian: Motor-Basal-Executive network
-gt_motor_conn = compute_gt_motor_connectivity(epochs_data, band_name="beta")
-
-# DiFuMo: Motor-cognitive network (hardcoded component indices)
-difumo_conn = compute_difumo_connectivity(epochs_data, band_name="beta")
-
-
-
+# Reduced motor-basal-executive-STN network
+motor_conn = compute_cimt_motor_connectivity(cimt_tc, band_name="beta")
 ```
 
-#### Supported frequency bands
-- `"theta"` (4-8 Hz)
-- `"alpha"` (8-12 Hz) 
-- `"low_beta"` (13-20 Hz)
-- `"high_beta"` (20-30 Hz)
-- `"beta"` (13-30 Hz)
-- `"low_gamma"` (30-60 Hz)
-- `"high_gamma"` (60-120 Hz)
-- `"gamma"` (30-100 Hz)
+#### Supported Frequency Bands
+| Band | Range (Hz) |
+|------|-----------|
+| `theta` | 4–8 |
+| `alpha` | 8–12 |
+| `low_beta` | 13–20 |
+| `high_beta` | 20–30 |
+| `beta` | 13–30 |
+| `low_gamma` | 30–60 |
+| `high_gamma` | 60–120 |
+| `gamma` | 30–100 |
 
-
-
-
----
+<br>
 
 ## Technical Details
 
-**Source reconstruction** uses LCMV beamforming in the `fsaverage` template space. Coregistration follows a three-stage procedure:
+### Coregistration
+Three-stage procedure with explicit failure on poor alignment:
 1. **Fiducial alignment** (`FidNz`, `FidT9`, `FidT10`)
 2. **ICP refinement** using all 280 channels as head shape points (nasion weight = 2.0), with outlier rejection (>5 mm MRI distance)
 3. **Final ICP refinement** (nasion weight = 10.0, 20 iterations)
 
-Pipeline **fails explicitly** if mean coregistration error exceeds 5 mm (no silent fallback). Typical mean error: **~4.86 mm**.
+Pipeline **fails explicitly** if mean coregistration error exceeds 5 mm. Typical mean error: **~4.86 mm**.
 
-- **Source space**: 5-mm isotropic volume grid
-- **Forward model**: Three-shell BEM
-- **Covariance**: Single OAS-regularized estimate from entire recording
-- **Beamformer**: Max-power orientation, unit-noise-gain, reduced rank, Tikhonov regularization (λ = 0.01)
-- **Connectivity**: WPLI2 debiased estimator with multitaper spectral analysis
+### Source Estimation Parameters
+- **Source space**: 5-mm isotropic volume grid bounded by inner skull
+- **Forward model**: Three-shell BEM (`fsaverage-5120-5120-5120-bem-sol.fif`)
+- **Covariance**: OAS-regularized estimate from entire recording (or per-epoch for epoch pipelines)
+- **Beamformer**: Max-power orientation, unit-noise-gain normalization, reduced rank, Tikhonov regularization (λ = 0.05)
+- **Neural refinement**: Smooth L1 reconstruction loss + VICReg variance anti-collapse term, AdamW/ScheduleFree optimizer, early stopping
 
----
+### Connectivity
+- **Estimator**: WPLI2 debiased with multitaper spectral analysis
+- **Output**: Symmetric matrices with ROI-labeled indices/columns
+
+<br>
 
 ## 📁 Expected Project Layout
-
-Your BIDS-like structure should look like this **after** running `download_fsaverage`:
 
 ```
 bids_root/
 ├── derivatives/
-│   ├── ica/                          # ICA-cleaned FIF files (input)
-│   └── lcmv/                         # Auto-generated by download_fsaverage()
-│       ├── fsaverage/                # Full fsaverage anatomy + BEM
+│   ├── ica/                              # ICA-cleaned FIF files (input)
+│   └── lcmv/                             # Auto-generated by download_fsaverage()
+│       ├── fsaverage/                    # Full fsaverage anatomy + BEM
 │       │   ├── bem/
 │       │   │   └── fsaverage-5120-5120-5120-bem-sol.fif
 │       │   └── mri/T1.mgz
-│       └── fsaverage-vol-5mm-src.fif # Precomputed volume source space
+│       └── fsaverage-vol-5mm-src.fif     # Precomputed volume source space
 └── sub-01/
     └── eeg/
-        └── sub-01_task-move_eeg.fif  # (raw data, if needed)
+        └── sub-01_task-move_eeg.fif      # Raw data (if needed)
+
 ```
 
-> 💡 The `derivatives/lcmv/` directory is **created and populated automatically** by `download_fsaverage`.
+> 💡 The `derivatives/lcmv/` directory is **created and populated automatically** by `download_fsaverage`. All source estimates are saved in `.h5` format for efficiency.
 
 
-All outputs are saved in modern `.h5` format for efficiency and compatibility.
+<br>
 
----
+### Summary of Changes
 
-
+| Section | Change | Rationale |
+|---------|--------|-----------|
+| **Header** | Added neural beamformer and batch tensor assembly to feature list | Reflects current library capabilities |
+| **Installation** | Split into core vs `[ml]` variants | Matches new `pyproject.toml` optional dependencies |
+| **Quick Start** | Restructured into 3 source estimation options (A/B/C) | Atlas-constrained is now the recommended default; neural is prominently featured |
+| **Batch Assembly** | Added Step 3 with `assemble_atlas_tensor` | Critical workflow that was missing from README |
+| **Technical Details** | Added neural refinement parameters | Documents loss function, optimizer, and early stopping |
+| **Connectivity** | Simplified to CIMT examples | Reduces clutter; GT/DiFuMo still available but not primary |
+| **Frequency Bands** | Converted to table | More scannable than bullet list |
