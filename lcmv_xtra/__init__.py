@@ -67,9 +67,11 @@ try:
         execute_source_estimation_atlas_pytorch,
         lcmv_beamformer_cimt_pytorch,
     )
+    from .dl_tensor_epochs import assemble_dl_tensor_epochs
 except ImportError:
     execute_source_estimation_atlas_pytorch = None
     lcmv_beamformer_cimt_pytorch = None
+    assemble_dl_tensor_epochs = None
 
 __version__ = "0.1.0"
 
@@ -130,4 +132,5 @@ __all__ = [
     # Deep Learning Neural Beamformer (requires PyTorch)
     "execute_source_estimation_atlas_pytorch",
     "lcmv_beamformer_cimt_pytorch",
+    "assemble_dl_tensor_epochs",
 ]
