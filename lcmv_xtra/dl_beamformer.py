@@ -52,24 +52,17 @@ logger = logging.getLogger(__name__)
 def get_best_device():
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+
 class EarlyStopping:
-    def __init__(self, patience=PATIENCE, min_delta_rel=0.005):
+    def __init__(self, patience=PATIENCE):
         self.patience = patience
-        self.min_delta_rel = min_delta_rel
         self.counter = 0
         self.best_score = None
         self.early_stop = False
         self.best_weights = None
 
     def __call__(self, val_loss, weights):
-        if self.best_score is None:
-            self.best_score = val_loss
-            self.best_weights = weights.detach().clone()
-            return
-
-        rel_improvement = (self.best_score - val_loss) / (self.best_score + FINITE_EPS)
-
-        if rel_improvement > self.min_delta_rel:
+        if self.best_score is None or val_loss < self.best_score:
             self.best_score = val_loss
             self.best_weights = weights.detach().clone()
             self.counter = 0
@@ -77,6 +70,7 @@ class EarlyStopping:
             self.counter += 1
             if self.counter >= self.patience:
                 self.early_stop = True
+
 
 class NeuralSpatialFilter(nn.Module):
     """Physics-constrained neural beamformer. One trainable matrix W."""
@@ -106,7 +100,6 @@ def train_beamformer(G_z, X_z, W_init, epochs=EPOCHS, lr=LEARNING_RATE,
                      patience=PATIENCE, val_fraction=VAL_FRACTION,
                      log: Optional[logging.Logger] = None):
     """Train with reconstruction + variance loss. No batching."""
-    # Use passed logger for multiprocessing visibility; fallback to module logger
     if log is None:
         log = logger
 
@@ -118,6 +111,8 @@ def train_beamformer(G_z, X_z, W_init, epochs=EPOCHS, lr=LEARNING_RATE,
 
     log.info("Train: %d | Val: %d | Device: %s", X_train.shape[1], X_val.shape[1], device)
     log.info("LR: %.2e | Weight Decay: %.2e", lr, WEIGHT_DECAY)
+    log.info("Early stopping evaluated every epoch | Patience: %d | Log every: %d epochs",
+             patience, LOG_INTERVAL)
 
     model = NeuralSpatialFilter(G_z, W_init).to(device)
 
@@ -146,27 +141,29 @@ def train_beamformer(G_z, X_z, W_init, epochs=EPOCHS, lr=LEARNING_RATE,
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=GRAD_CLIP_NORM)
         optimizer.step()
 
+        # --- Early stopping evaluation (EVERY epoch) ---
+        model.eval()
+        if HAS_SCHEDULE_FREE:
+            optimizer.eval()
+
+        with torch.no_grad():
+            S_val, X_val_hat = model(X_val)
+            val_loss = compute_loss(X_val, X_val_hat, S_val)
+
+        early_stopper(val_loss.item(), model.W)
+
+        if early_stopper.early_stop:
+            log.info("Early stopping at epoch %d.", epoch + 1)
+            break
+
+        # --- Console logging (every LOG_INTERVAL epochs) ---
         if (epoch + 1) % LOG_INTERVAL == 0:
-            model.eval()
-            if HAS_SCHEDULE_FREE:
-                optimizer.eval()
-
-            with torch.no_grad():
-                S_val, X_val_hat = model(X_val)
-                val_loss = compute_loss(X_val, X_val_hat, S_val)
-
-            early_stopper(val_loss.item(), model.W)
-
             log.info("Epoch %04d/%d | Train: %.4e | Val: %.4e",
                      epoch + 1, epochs, loss.item(), val_loss.item())
 
-            if early_stopper.early_stop:
-                log.info("Early stopping at epoch %d.", epoch + 1)
-                break
-
-            model.train()
-            if HAS_SCHEDULE_FREE:
-                optimizer.train()
+        model.train()
+        if HAS_SCHEDULE_FREE:
+            optimizer.train()
 
     if early_stopper.best_weights is not None:
         log.info("Using best weights from early stopping.")
