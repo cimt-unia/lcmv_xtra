@@ -61,6 +61,16 @@ from .source_estimation_atlas import (
     lookup_multiple_coordinates,
 )
 
+# Deep Learning Neural Beamformer (Optional: requires PyTorch)
+try:
+    from .dl_beamformer import (
+        execute_source_estimation_atlas_pytorch,
+        lcmv_beamformer_cimt_pytorch,
+    )
+except ImportError:
+    execute_source_estimation_atlas_pytorch = None
+    lcmv_beamformer_cimt_pytorch = None
+
 __version__ = "0.1.0"
 
 __all__ = [
@@ -89,7 +99,7 @@ __all__ = [
     "extract_custom_roi_time_courses",
     "assemble_custom_tensor_epochs",
 
-    # Tiral Source Estimation
+    # Trial Source Estimation
     "execute_variable_tensor",
     
     # Connectivity Analysis
@@ -116,4 +126,8 @@ __all__ = [
 
     # Tensor / ML Aggregation (CIMT Atlas-Before-Inverse)
     "assemble_atlas_tensor",
+
+    # Deep Learning Neural Beamformer (requires PyTorch)
+    "execute_source_estimation_atlas_pytorch",
+    "lcmv_beamformer_cimt_pytorch",
 ]
