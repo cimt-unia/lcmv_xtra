@@ -40,7 +40,7 @@ BETAS = (0.9, 0.95)
 WEIGHT_DECAY = 0.01
 GRAD_CLIP_NORM = 1.0
 EPOCHS = 3000
-PATIENCE = 10
+PATIENCE = 5
 VAL_FRACTION = 0.2
 LOG_INTERVAL = 200
 FINITE_EPS = 1e-8
@@ -52,17 +52,24 @@ logger = logging.getLogger(__name__)
 def get_best_device():
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
 class EarlyStopping:
-    def __init__(self, patience=PATIENCE):
+    def __init__(self, patience=PATIENCE, min_delta_rel=0.005):
         self.patience = patience
+        self.min_delta_rel = min_delta_rel
         self.counter = 0
         self.best_score = None
         self.early_stop = False
         self.best_weights = None
 
     def __call__(self, val_loss, weights):
-        if self.best_score is None or val_loss < self.best_score:
+        if self.best_score is None:
+            self.best_score = val_loss
+            self.best_weights = weights.detach().clone()
+            return
+
+        rel_improvement = (self.best_score - val_loss) / (self.best_score + FINITE_EPS)
+
+        if rel_improvement > self.min_delta_rel:
             self.best_score = val_loss
             self.best_weights = weights.detach().clone()
             self.counter = 0
@@ -70,7 +77,6 @@ class EarlyStopping:
             self.counter += 1
             if self.counter >= self.patience:
                 self.early_stop = True
-
 
 class NeuralSpatialFilter(nn.Module):
     """Physics-constrained neural beamformer. One trainable matrix W."""
