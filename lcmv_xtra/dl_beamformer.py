@@ -22,11 +22,17 @@ try:
 except ImportError:
     HAS_SCHEDULE_FREE = False
 
-import lcmv_xtra
-from lcmv_xtra.source_estimation import (
-    load_subject, validate_fsaverage, _run_coregistration, _setup_logger,
+
+from .source_estimation import (
+    load_subject,
+    validate_fsaverage,
+    _run_coregistration,
+    _setup_logger,
 )
-from lcmv_xtra.source_estimation_atlas import reduce_leadfield_to_cimt
+from .source_estimation_atlas import reduce_leadfield_to_cimt
+
+
+import lcmv_xtra
 
 # Constants
 N_ROIS = 448
@@ -35,7 +41,7 @@ LEARNING_RATE = 1e-4
 BETAS = (0.9, 0.95)
 WEIGHT_DECAY = 0.01  # FIXED: Strong weight decay (was 1e-4, was unused)
 GRAD_CLIP_NORM = 1.0
-EPOCHS = 20000
+EPOCHS = 5500
 PATIENCE = 10
 VAL_FRACTION = 0.2
 LOG_INTERVAL = 500
