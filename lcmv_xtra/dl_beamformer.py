@@ -1,6 +1,6 @@
 # lcmv_xtra/dl_beamformer.py
 """
-CIMT-Constrained Neural Beamformer
+CIMT-Constrained Neural LCMV Beamformer
 ================================================
 Physics-Constrained Autoencoder. Loss = Reconstruction + Variance.
 No batching (fits in GPU). No tqdm.
@@ -8,7 +8,7 @@ No batching (fits in GPU). No tqdm.
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 
 import mne
 import numpy as np
@@ -22,7 +22,6 @@ try:
 except ImportError:
     HAS_SCHEDULE_FREE = False
 
-
 from .source_estimation import (
     load_subject,
     validate_fsaverage,
@@ -31,7 +30,6 @@ from .source_estimation import (
 )
 from .source_estimation_atlas import reduce_leadfield_to_cimt
 
-
 import lcmv_xtra
 
 # Constants
@@ -39,7 +37,7 @@ N_ROIS = 448
 N_ORIENTATIONS = 3
 LEARNING_RATE = 1e-4
 BETAS = (0.9, 0.95)
-WEIGHT_DECAY = 0.01  # FIXED: Strong weight decay (was 1e-4, was unused)
+WEIGHT_DECAY = 0.01
 GRAD_CLIP_NORM = 1.0
 EPOCHS = 5500
 PATIENCE = 10
@@ -47,7 +45,6 @@ VAL_FRACTION = 0.2
 LOG_INTERVAL = 500
 FINITE_EPS = 1e-8
 VAR_LOSS_WEIGHT = 0.1
-
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +73,7 @@ class EarlyStopping:
 
 
 class NeuralSpatialFilter(nn.Module):
-    """Simple physics-constrained beamformer. One trainable matrix W."""
+    """Physics-constrained neural beamformer. One trainable matrix W."""
 
     def __init__(self, G_z, W_init):
         super().__init__()
@@ -100,20 +97,24 @@ def compute_loss(X_z, X_hat, S_hat):
 
 
 def train_beamformer(G_z, X_z, W_init, epochs=EPOCHS, lr=LEARNING_RATE,
-                     patience=PATIENCE, val_fraction=VAL_FRACTION):
+                     patience=PATIENCE, val_fraction=VAL_FRACTION,
+                     log: Optional[logging.Logger] = None):
     """Train with reconstruction + variance loss. No batching."""
+    # Use passed logger for multiprocessing visibility; fallback to module logger
+    if log is None:
+        log = logger
+
     device = X_z.device
 
     val_start = int(X_z.shape[1] * (1.0 - val_fraction))
     X_train = X_z[:, :val_start]
     X_val = X_z[:, val_start:]
 
-    logger.info("Train: %d | Val: %d | Device: %s", X_train.shape[1], X_val.shape[1], device)
-    logger.info("LR: %.2e | Weight Decay: %.2e", lr, WEIGHT_DECAY)
+    log.info("Train: %d | Val: %d | Device: %s", X_train.shape[1], X_val.shape[1], device)
+    log.info("LR: %.2e | Weight Decay: %.2e", lr, WEIGHT_DECAY)
 
     model = NeuralSpatialFilter(G_z, W_init).to(device)
 
-    # FIXED: Pass weight_decay to the optimizer
     if HAS_SCHEDULE_FREE:
         optimizer = AdamWScheduleFree(
             model.parameters(), lr=lr, betas=BETAS, weight_decay=WEIGHT_DECAY
@@ -150,11 +151,11 @@ def train_beamformer(G_z, X_z, W_init, epochs=EPOCHS, lr=LEARNING_RATE,
 
             early_stopper(val_loss.item(), model.W)
 
-            logger.info("Epoch %04d/%d | Train: %.4e | Val: %.4e",
-                        epoch + 1, epochs, loss.item(), val_loss.item())
+            log.info("Epoch %04d/%d | Train: %.4e | Val: %.4e",
+                     epoch + 1, epochs, loss.item(), val_loss.item())
 
             if early_stopper.early_stop:
-                logger.info("Early stopping at epoch %d.", epoch + 1)
+                log.info("Early stopping at epoch %d.", epoch + 1)
                 break
 
             model.train()
@@ -162,7 +163,7 @@ def train_beamformer(G_z, X_z, W_init, epochs=EPOCHS, lr=LEARNING_RATE,
                 optimizer.train()
 
     if early_stopper.best_weights is not None:
-        logger.info("Using best weights from early stopping.")
+        log.info("Using best weights from early stopping.")
         return early_stopper.best_weights.to(device)
 
     return model.W.detach()
@@ -171,13 +172,13 @@ def train_beamformer(G_z, X_z, W_init, epochs=EPOCHS, lr=LEARNING_RATE,
 def lcmv_beamformer_cimt_pytorch(input, ch_pos, fsaverage_dir, output_dir,
                                  subject_id, task, reg=0.05, n_jobs=1,
                                  nn_epochs=EPOCHS, verbose=False):
-    """Run the full simplified beamformer pipeline."""
+    """Run the full CIMT-constrained neural LCMV pipeline."""
     fsaverage_dir = Path(fsaverage_dir)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     log = _setup_logger(subject_id, task, output_dir, verbose)
-    log.info("Simplified Neural Beamformer: %s - %s", subject_id, task)
+    log.info("CIMT-Constrained Neural LCMV: %s - %s", subject_id, task)
 
     bem_file, src_file = validate_fsaverage(fsaverage_dir)
 
@@ -189,7 +190,7 @@ def lcmv_beamformer_cimt_pytorch(input, ch_pos, fsaverage_dir, output_dir,
     src = mne.read_source_spaces(src_file)
     bem = mne.read_bem_solution(bem_file)
     fwd = mne.make_forward_solution(input.info, trans=trans, src=src, bem=bem,
-                                     eeg=True, mindist=5.0, n_jobs=n_jobs)
+                                    eeg=True, mindist=5.0, n_jobs=n_jobs)
 
     log.info("Atlas reduction...")
     G_reduced, voxel_labels, _ = reduce_leadfield_to_cimt(fwd=fwd, src=src, verbose=True)
@@ -234,7 +235,7 @@ def lcmv_beamformer_cimt_pytorch(input, ch_pos, fsaverage_dir, output_dir,
     W_init = W_init.to(device)
 
     log.info("Training (%d epochs)...", nn_epochs)
-    W_learned = train_beamformer(G_z, X_z, W_init, epochs=nn_epochs)
+    W_learned = train_beamformer(G_z, X_z, W_init, epochs=nn_epochs, log=log)
 
     log.info("Applying...")
     with torch.no_grad():
@@ -267,7 +268,7 @@ def lcmv_beamformer_cimt_pytorch(input, ch_pos, fsaverage_dir, output_dir,
         "source_space": "CIMT_448_ROIs_Neural",
         "subject_output": str(output_dir),
         "fsaverage_dir": str(fsaverage_dir),
-        "beamformer_type": "PyTorch_Minimal_Reconstruction_Variance",
+        "beamformer_type": "CIMT_Constrained_Neural_LCMV",
         "nn_epochs": nn_epochs,
         "optimizer": "AdamWScheduleFree" if HAS_SCHEDULE_FREE else "AdamW",
         "loss_components": ["SmoothL1_Reconstruction", "VICReg_Variance"],
