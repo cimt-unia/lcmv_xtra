@@ -32,7 +32,7 @@ from .source_estimation_atlas import reduce_leadfield_to_cimt
 
 import lcmv_xtra
 
-# Constants
+# Constants (defaults — all overridable via function parameters)
 N_ROIS = 448
 N_ORIENTATIONS = 3
 LEARNING_RATE = 1e-4
@@ -41,6 +41,7 @@ WEIGHT_DECAY = 0.01
 GRAD_CLIP_NORM = 1.0
 EPOCHS = 3000
 PATIENCE = 3
+MIN_DELTA = 0.05
 VAL_FRACTION = 0.2
 LOG_INTERVAL = 200
 FINITE_EPS = 1e-8
@@ -51,18 +52,18 @@ logger = logging.getLogger(__name__)
 
 def get_best_device():
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
+
+
 class EarlyStopping:
-    def __init__(self, patience=PATIENCE, min_delta=0.05):
+    def __init__(self, patience=PATIENCE, min_delta=MIN_DELTA):
         self.patience = patience
-        self.min_delta = min_delta  # Minimum improvement required to reset counter
+        self.min_delta = min_delta
         self.counter = 0
         self.best_score = None
         self.early_stop = False
         self.best_weights = None
 
     def __call__(self, val_loss, weights):
-        # Must improve by at least min_delta to be considered "improving"
         if self.best_score is None or val_loss < (self.best_score - self.min_delta):
             self.best_score = val_loss
             self.best_weights = weights.detach().clone()
@@ -71,6 +72,7 @@ class EarlyStopping:
             self.counter += 1
             if self.counter >= self.patience:
                 self.early_stop = True
+
 
 class NeuralSpatialFilter(nn.Module):
     """Physics-constrained neural beamformer. One trainable matrix W."""
@@ -86,18 +88,22 @@ class NeuralSpatialFilter(nn.Module):
         return S_hat, X_hat
 
 
-def compute_loss(X_z, X_hat, S_hat):
+def compute_loss(X_z, X_hat, S_hat, var_loss_weight=VAR_LOSS_WEIGHT):
     """Reconstruction + Variance (anti-collapse)."""
     recon_loss = F.smooth_l1_loss(X_z, X_hat, beta=1.0)
 
     std_s = torch.sqrt(S_hat.var(dim=1) + FINITE_EPS)
     var_loss = F.relu(1.0 - std_s).mean()
 
-    return recon_loss + (VAR_LOSS_WEIGHT * var_loss)
+    return recon_loss + (var_loss_weight * var_loss)
 
 
 def train_beamformer(G_z, X_z, W_init, epochs=EPOCHS, lr=LEARNING_RATE,
-                     patience=PATIENCE, val_fraction=VAL_FRACTION,
+                     betas=BETAS, weight_decay=WEIGHT_DECAY,
+                     grad_clip_norm=GRAD_CLIP_NORM,
+                     patience=PATIENCE, min_delta=MIN_DELTA,
+                     val_fraction=VAL_FRACTION, log_interval=LOG_INTERVAL,
+                     var_loss_weight=VAR_LOSS_WEIGHT,
                      log: Optional[logging.Logger] = None):
     """Train with reconstruction + variance loss. No batching."""
     if log is None:
@@ -110,22 +116,24 @@ def train_beamformer(G_z, X_z, W_init, epochs=EPOCHS, lr=LEARNING_RATE,
     X_val = X_z[:, val_start:]
 
     log.info("Train: %d | Val: %d | Device: %s", X_train.shape[1], X_val.shape[1], device)
-    log.info("LR: %.2e | Weight Decay: %.2e", lr, WEIGHT_DECAY)
-    log.info("Early stopping evaluated every epoch | Patience: %d | Log every: %d epochs",
-             patience, LOG_INTERVAL)
+    log.info("LR: %.2e | Betas: %s | Weight Decay: %.2e | Grad Clip: %.1f",
+             lr, betas, weight_decay, grad_clip_norm)
+    log.info("Patience: %d | Min delta: %.4f | Val fraction: %.2f | Log every: %d epochs",
+             patience, min_delta, val_fraction, log_interval)
+    log.info("Var loss weight: %.3f", var_loss_weight)
 
     model = NeuralSpatialFilter(G_z, W_init).to(device)
 
     if HAS_SCHEDULE_FREE:
         optimizer = AdamWScheduleFree(
-            model.parameters(), lr=lr, betas=BETAS, weight_decay=WEIGHT_DECAY
+            model.parameters(), lr=lr, betas=betas, weight_decay=weight_decay
         )
     else:
         optimizer = torch.optim.AdamW(
-            model.parameters(), lr=lr, betas=BETAS, weight_decay=WEIGHT_DECAY
+            model.parameters(), lr=lr, betas=betas, weight_decay=weight_decay
         )
 
-    early_stopper = EarlyStopping(patience=patience)
+    early_stopper = EarlyStopping(patience=patience, min_delta=min_delta)
 
     for epoch in range(epochs):
         model.train()
@@ -135,10 +143,10 @@ def train_beamformer(G_z, X_z, W_init, epochs=EPOCHS, lr=LEARNING_RATE,
         optimizer.zero_grad(set_to_none=True)
 
         S_hat, X_hat = model(X_train)
-        loss = compute_loss(X_train, X_hat, S_hat)
+        loss = compute_loss(X_train, X_hat, S_hat, var_loss_weight=var_loss_weight)
 
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=GRAD_CLIP_NORM)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
         optimizer.step()
 
         # --- Early stopping evaluation (EVERY epoch) ---
@@ -148,7 +156,7 @@ def train_beamformer(G_z, X_z, W_init, epochs=EPOCHS, lr=LEARNING_RATE,
 
         with torch.no_grad():
             S_val, X_val_hat = model(X_val)
-            val_loss = compute_loss(X_val, X_val_hat, S_val)
+            val_loss = compute_loss(X_val, X_val_hat, S_val, var_loss_weight=var_loss_weight)
 
         early_stopper(val_loss.item(), model.W)
 
@@ -156,8 +164,8 @@ def train_beamformer(G_z, X_z, W_init, epochs=EPOCHS, lr=LEARNING_RATE,
             log.info("Early stopping at epoch %d.", epoch + 1)
             break
 
-        # --- Console logging (every LOG_INTERVAL epochs) ---
-        if (epoch + 1) % LOG_INTERVAL == 0:
+        # --- Console logging (every log_interval epochs) ---
+        if (epoch + 1) % log_interval == 0:
             log.info("Epoch %04d/%d | Train: %.4e | Val: %.4e",
                      epoch + 1, epochs, loss.item(), val_loss.item())
 
@@ -174,7 +182,15 @@ def train_beamformer(G_z, X_z, W_init, epochs=EPOCHS, lr=LEARNING_RATE,
 
 def lcmv_beamformer_cimt_pytorch(input, ch_pos, fsaverage_dir, output_dir,
                                  subject_id, task, reg=0.05, n_jobs=1,
-                                 nn_epochs=EPOCHS, verbose=False):
+                                 pick_ori="max-power",
+                                 nn_epochs=EPOCHS, lr=LEARNING_RATE,
+                                 betas=BETAS, weight_decay=WEIGHT_DECAY,
+                                 grad_clip_norm=GRAD_CLIP_NORM,
+                                 patience=PATIENCE, min_delta=MIN_DELTA,
+                                 val_fraction=VAL_FRACTION,
+                                 log_interval=LOG_INTERVAL,
+                                 var_loss_weight=VAR_LOSS_WEIGHT,
+                                 verbose=False):
     """Run the full CIMT-constrained neural LCMV pipeline."""
     fsaverage_dir = Path(fsaverage_dir)
     output_dir = Path(output_dir)
@@ -198,7 +214,7 @@ def lcmv_beamformer_cimt_pytorch(input, ch_pos, fsaverage_dir, output_dir,
     log.info("Atlas reduction...")
     G_reduced, voxel_labels, _ = reduce_leadfield_to_cimt(fwd=fwd, src=src, verbose=True)
 
-    log.info("Analytical LCMV...")
+    log.info("Analytical LCMV (pick_ori=%s)...", pick_ori)
     cov = mne.compute_raw_covariance(input, method="oas", picks="eeg", rank=None, n_jobs=n_jobs, verbose=False)
 
     fwd_temp = fwd.copy()
@@ -210,15 +226,23 @@ def lcmv_beamformer_cimt_pytorch(input, ch_pos, fsaverage_dir, output_dir,
 
     filters = mne.beamformer.make_lcmv(
         info=input.info, forward=fwd_temp, data_cov=cov, noise_cov=cov, reg=reg,
-        pick_ori="max-power", weight_norm="unit-noise-gain", reduce_rank=True, rank=None, verbose=False,
+        pick_ori=pick_ori, weight_norm="unit-noise-gain", reduce_rank=True, rank=None, verbose=False,
     )
 
     W_analytical = filters["weights"]
-    max_power_ori = filters["max_power_ori"]
+    max_power_ori = filters.get("max_power_ori", None)
 
     n_channels = G_reduced.shape[0]
-    G_reduced_reshaped = G_reduced.reshape(n_channels, N_ROIS, N_ORIENTATIONS)
-    G_collapsed = np.einsum("csr,sr->cs", G_reduced_reshaped, max_power_ori)
+
+    if pick_ori == "max-power" and max_power_ori is not None:
+        # Collapse orientations using max-power orientation weights
+        G_reduced_reshaped = G_reduced.reshape(n_channels, N_ROIS, N_ORIENTATIONS)
+        G_collapsed = np.einsum("csr,sr->cs", G_reduced_reshaped, max_power_ori)
+        log.info("Orientation: max-power collapse via analytical weights")
+    else:
+        # Use vector beamformer output directly (3 orientations per ROI)
+        G_collapsed = G_reduced
+        log.info("Orientation: vector (all %d orientations preserved)", N_ORIENTATIONS)
 
     log.info("Z-scoring...")
     X_raw = input.get_data(picks="eeg")
@@ -238,7 +262,13 @@ def lcmv_beamformer_cimt_pytorch(input, ch_pos, fsaverage_dir, output_dir,
     W_init = W_init.to(device)
 
     log.info("Training (%d epochs)...", nn_epochs)
-    W_learned = train_beamformer(G_z, X_z, W_init, epochs=nn_epochs, log=log)
+    W_learned = train_beamformer(
+        G_z, X_z, W_init,
+        epochs=nn_epochs, lr=lr, betas=betas, weight_decay=weight_decay,
+        grad_clip_norm=grad_clip_norm, patience=patience, min_delta=min_delta,
+        val_fraction=val_fraction, log_interval=log_interval,
+        var_loss_weight=var_loss_weight, log=log,
+    )
 
     log.info("Applying...")
     with torch.no_grad():
@@ -268,17 +298,23 @@ def lcmv_beamformer_cimt_pytorch(input, ch_pos, fsaverage_dir, output_dir,
         "n_timepoints": int(stc_data.shape[1]),
         "coreg_mean_error_mm": float(coreg_errors["mean"]),
         "regularization": reg,
+        "pick_ori": pick_ori,
         "source_space": "CIMT_448_ROIs_Neural",
         "subject_output": str(output_dir),
         "fsaverage_dir": str(fsaverage_dir),
         "beamformer_type": "CIMT_Constrained_Neural_LCMV",
         "nn_epochs": nn_epochs,
+        "learning_rate": lr,
+        "betas": list(betas),
+        "weight_decay": weight_decay,
+        "grad_clip_norm": grad_clip_norm,
+        "patience": patience,
+        "min_delta": min_delta,
+        "val_fraction": val_fraction,
+        "log_interval": log_interval,
+        "var_loss_weight": var_loss_weight,
         "optimizer": "AdamWScheduleFree" if HAS_SCHEDULE_FREE else "AdamW",
         "loss_components": ["SmoothL1_Reconstruction", "VICReg_Variance"],
-        "var_loss_weight": VAR_LOSS_WEIGHT,
-        "weight_decay": WEIGHT_DECAY,
-        "learning_rate": LEARNING_RATE,
-        "val_fraction": VAL_FRACTION,
     }
     with open(output_dir / "pipeline_metadata.json", "w") as f:
         json.dump(metadata, f, indent=2)
@@ -289,7 +325,13 @@ def lcmv_beamformer_cimt_pytorch(input, ch_pos, fsaverage_dir, output_dir,
 
 def execute_source_estimation_atlas_pytorch(
     project_base, subject_id, task, ica_file_path, fsaverage_dir,
-    reg=0.05, n_jobs=1, nn_epochs=EPOCHS, verbose=False,
+    reg=0.05, n_jobs=1, pick_ori="max-power",
+    nn_epochs=EPOCHS, lr=LEARNING_RATE,
+    betas=BETAS, weight_decay=WEIGHT_DECAY,
+    grad_clip_norm=GRAD_CLIP_NORM,
+    patience=PATIENCE, min_delta=MIN_DELTA,
+    val_fraction=VAL_FRACTION, log_interval=LOG_INTERVAL,
+    var_loss_weight=VAR_LOSS_WEIGHT, verbose=False,
 ):
     """High-level orchestrator."""
     project_base = Path(project_base)
@@ -310,5 +352,31 @@ def execute_source_estimation_atlas_pytorch(
     return lcmv_beamformer_cimt_pytorch(
         input=raw, ch_pos=ch_pos, fsaverage_dir=fsaverage_dir,
         output_dir=output_dir, subject_id=subject_id, task=task,
-        reg=reg, n_jobs=n_jobs, nn_epochs=nn_epochs, verbose=verbose,
+        reg=reg, n_jobs=n_jobs, pick_ori=pick_ori,
+        nn_epochs=nn_epochs, lr=lr, betas=betas, weight_decay=weight_decay,
+        grad_clip_norm=grad_clip_norm, patience=patience, min_delta=min_delta,
+        val_fraction=val_fraction, log_interval=log_interval,
+        var_loss_weight=var_loss_weight, verbose=verbose,
     )
+
+"""
+lx.assemble_dl_tensor_epochs(
+    data_index=pre_df,
+    fs_dir=FS_DIR,
+    output_dir=OUTPUT_DIR,
+    task_name="sm_pre",
+    project_base=PROJECT_BASE,
+    epoch_duration=2.5,
+    target_sfreq=250.0,
+    n_jobs=1,
+    # All beamformer params now configurable:
+    nn_epochs=8000,
+    lr=5e-5,
+    patience=5,
+    min_delta=0.02,
+    log_interval=100,
+    pick_ori="max-power",
+    var_loss_weight=0.05,
+    verbose=True,
+)
+"""
