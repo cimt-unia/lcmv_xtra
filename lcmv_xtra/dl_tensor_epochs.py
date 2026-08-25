@@ -45,7 +45,10 @@ def epoch_continuous_data(data: np.ndarray, sfreq: float, epoch_duration: float)
 def _process_single_subject(args: Tuple) -> Dict:
     """Run neural beamformer on continuous data, then epoch the output."""
     (sid, fif_path, task_name, project_base, fs_dir,
-     epoch_duration, nn_epochs, reg, n_jobs_inner, verbose) = args
+     epoch_duration, nn_epochs, reg, pick_ori,
+     lr, betas, weight_decay, grad_clip_norm,
+     patience, min_delta, val_fraction, log_interval,
+     var_loss_weight, n_jobs_inner, verbose) = args
 
     try:
         # 1. Run continuous neural beamformer
@@ -57,7 +60,17 @@ def _process_single_subject(args: Tuple) -> Dict:
             fsaverage_dir=str(fs_dir),
             reg=reg,
             n_jobs=n_jobs_inner,
+            pick_ori=pick_ori,
             nn_epochs=nn_epochs,
+            lr=lr,
+            betas=betas,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            patience=patience,
+            min_delta=min_delta,
+            val_fraction=val_fraction,
+            log_interval=log_interval,
+            var_loss_weight=var_loss_weight,
             verbose=verbose,
         )
 
@@ -155,8 +168,23 @@ def assemble_dl_tensor_epochs(
     task_name: str = "study",
     project_base: Optional[Path] = None,
     epoch_duration: float = 2.5,
-    nn_epochs: int = 5500,
+    # LCMV parameters
     reg: float = 0.05,
+    pick_ori: str = "max-power",
+    # Training parameters
+    nn_epochs: int = 3000,
+    lr: float = 1e-4,
+    betas: Tuple[float, float] = (0.9, 0.95),
+    weight_decay: float = 0.01,
+    grad_clip_norm: float = 1.0,
+    # Early stopping parameters
+    patience: int = 3,
+    min_delta: float = 0.05,
+    val_fraction: float = 0.2,
+    # Logging & loss parameters
+    log_interval: int = 200,
+    var_loss_weight: float = 0.1,
+    # Execution parameters
     n_jobs: int = 1,
     n_jobs_inner: int = 1,
     verbose: bool = False,
@@ -182,10 +210,30 @@ def assemble_dl_tensor_epochs(
         Base project directory. Defaults to cwd.
     epoch_duration : float
         Length of each non-overlapping epoch in seconds.
-    nn_epochs : int
-        Max training epochs for neural beamformer.
     reg : float
         LCMV regularization parameter.
+    pick_ori : str
+        Orientation selection: "max-power" or "vector".
+    nn_epochs : int
+        Max training epochs for neural beamformer.
+    lr : float
+        Learning rate.
+    betas : tuple of float
+        Adam optimizer betas.
+    weight_decay : float
+        L2 regularization strength.
+    grad_clip_norm : float
+        Max gradient norm for clipping.
+    patience : int
+        Consecutive non-improving epochs before early stop.
+    min_delta : float
+        Minimum absolute improvement to reset patience counter.
+    val_fraction : float
+        Fraction of data held out for validation.
+    log_interval : int
+        Epochs between console log entries.
+    var_loss_weight : float
+        Weight of variance anti-collapse loss term.
     n_jobs : int
         Number of parallel subjects. Default 1 (GPU-safe).
     n_jobs_inner : int
@@ -210,6 +258,16 @@ def assemble_dl_tensor_epochs(
             epoch_duration,
             nn_epochs,
             reg,
+            pick_ori,
+            lr,
+            betas,
+            weight_decay,
+            grad_clip_norm,
+            patience,
+            min_delta,
+            val_fraction,
+            log_interval,
+            var_loss_weight,
             n_jobs_inner,
             verbose,
         )
