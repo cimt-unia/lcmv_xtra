@@ -111,6 +111,7 @@ def _process_single_subject_custom_epochs(args: Tuple) -> Dict:
         sid, fif_path, task_name, project_base, fs_dir,
         epoch_duration, verbose,
         noise_cov_method, baseline_tmin, baseline_tmax,
+        data_cov_tmin, data_cov_tmax,
         use_autoreject, use_epoched_ica,
         roi_coordinates, radius_mm, mode
     ) = args
@@ -128,6 +129,8 @@ def _process_single_subject_custom_epochs(args: Tuple) -> Dict:
             noise_cov_method=noise_cov_method,
             baseline_tmin=baseline_tmin,
             baseline_tmax=baseline_tmax,
+            data_cov_tmin=data_cov_tmin,
+            data_cov_tmax=data_cov_tmax,
             use_autoreject=use_autoreject,
             use_epoched_ica=use_epoched_ica,
         )
@@ -245,6 +248,8 @@ def assemble_custom_tensor_epochs(
     noise_cov_method: str = 'shrunk',
     baseline_tmin: Optional[float] = None,
     baseline_tmax: float = 1.5,
+    data_cov_tmin: Optional[float] = None,
+    data_cov_tmax: Optional[float] = None,
     use_autoreject: bool = False,
     use_epoched_ica: bool = False,
 ) -> Optional[Path]:
@@ -263,6 +268,13 @@ def assemble_custom_tensor_epochs(
         Must be < epoch_duration. For 5s epochs with stim at 2.5s, 1.5s is ideal.
     noise_cov_method : str
         Covariance estimator ('shrunk', 'oas', 'empirical'). Default 'shrunk'.
+    data_cov_tmin : float | None
+        Start of data covariance window (seconds relative to epoch tmin=0).
+        None defaults to 0.0 (full epoch start).
+    data_cov_tmax : float | None
+        End of data covariance window (seconds relative to epoch tmin=0).
+        None defaults to epoch tmax (full epoch end). Set to restrict the
+        data covariance to a specific interval (e.g., movement execution period).
     use_autoreject : bool
         If True, apply AutoReject for epoch-level artifact rejection before
         covariance estimation. Requires ``autoreject`` package. Default False.
@@ -281,6 +293,7 @@ def assemble_custom_tensor_epochs(
             row['subject_id'], Path(row['fif_path']), task_name,
             project_base, fs_dir, epoch_duration, verbose,
             noise_cov_method, baseline_tmin, baseline_tmax,
+            data_cov_tmin, data_cov_tmax,
             use_autoreject, use_epoched_ica,
             roi_coordinates, radius_mm, mode,
         )
