@@ -111,6 +111,7 @@ def _process_single_subject_custom_epochs(args: Tuple) -> Dict:
         sid, fif_path, task_name, project_base, fs_dir,
         epoch_duration, verbose,
         noise_cov_method, baseline_tmin, baseline_tmax,
+        use_autoreject, use_epoched_ica,
         roi_coordinates, radius_mm, mode
     ) = args
 
@@ -126,7 +127,9 @@ def _process_single_subject_custom_epochs(args: Tuple) -> Dict:
             verbose=verbose,
             noise_cov_method=noise_cov_method,
             baseline_tmin=baseline_tmin,
-            baseline_tmax=baseline_tmax
+            baseline_tmax=baseline_tmax,
+            use_autoreject=use_autoreject,
+            use_epoched_ica=use_epoched_ica,
         )
 
         subject_output = Path(metadata['subject_output'])
@@ -242,6 +245,8 @@ def assemble_custom_tensor_epochs(
     noise_cov_method: str = 'shrunk',
     baseline_tmin: Optional[float] = None,
     baseline_tmax: float = 1.5,
+    use_autoreject: bool = False,
+    use_epoched_ica: bool = False,
 ) -> Optional[Path]:
     """
     Assemble a 4D custom ROI epoch tensor from cleaned continuous EEG files.
@@ -258,6 +263,13 @@ def assemble_custom_tensor_epochs(
         Must be < epoch_duration. For 5s epochs with stim at 2.5s, 1.5s is ideal.
     noise_cov_method : str
         Covariance estimator ('shrunk', 'oas', 'empirical'). Default 'shrunk'.
+    use_autoreject : bool
+        If True, apply AutoReject for epoch-level artifact rejection before
+        covariance estimation. Requires ``autoreject`` package. Default False.
+    use_epoched_ica : bool
+        If True, apply epoched ICA + ICLabel for residual artifact removal
+        before covariance estimation. Requires ``mne_icalabel`` package.
+        Default False.
     """
     if data_index.empty:
         return None
@@ -269,6 +281,7 @@ def assemble_custom_tensor_epochs(
             row['subject_id'], Path(row['fif_path']), task_name,
             project_base, fs_dir, epoch_duration, verbose,
             noise_cov_method, baseline_tmin, baseline_tmax,
+            use_autoreject, use_epoched_ica,
             roi_coordinates, radius_mm, mode,
         )
         for _, row in data_index.iterrows()
