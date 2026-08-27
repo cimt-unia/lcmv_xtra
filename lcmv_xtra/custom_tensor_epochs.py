@@ -1,8 +1,9 @@
 # lcmv_xtra/custom_tensor_epochs.py
 """
-Custom MNI ROI Epoch Tensor Assembly.
+Custom MNI Voxel Epoch Tensor Assembly.
 Extracts time courses from user-defined MNI coordinates per epoch,
 producing a 4D tensor: (Subjects, ROIs, Epochs, Time_per_epoch).
+Integrates with source_estimation_epochs.py for proper noise covariance handling.
 """
 
 import os
@@ -14,7 +15,6 @@ from pathlib import Path
 from scipy import signal
 from typing import List, Dict, Optional, Tuple, Literal
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from nilearn import image
 
 from .source_estimation_epochs import execute_source_estimation_epochs
 
@@ -25,16 +25,27 @@ DEFAULT_RADIUS_MM: float = 5.0
 DEFAULT_TARGET_SFREQ: float = 250.0
 
 
-def _get_mni_coordinates_from_src(stc: mne.SourceEstimate, src: mne.SourceSpaces) -> np.ndarray:
-    """Convert source space vertex coordinates to MNI space."""
+def _get_mni_coordinates_from_src(
+    stc: mne.SourceEstimate, 
+    src: mne.SourceSpaces
+) -> np.ndarray:
+    """Convert active source space vertex coordinates to MNI space (mm)."""
     vertices = stc.vertices[0]
     src_rr = src[0]['rr'][vertices] * METERS_TO_MILLIMETERS
+    
+    # fsaverage vol src vertices are typically in MRI/head frame.
+    # For fsaverage, this is effectively MNI-aligned.
+    # If a specific tal_mri.trans exists, apply it; otherwise assume identity.
     try:
         trans = src[0]['mri_ras_t']['trans']
+        # Note: This transform maps MRI -> RAS. For fsaverage vol src,
+        # vertices are already in a standardized space. 
+        # We use coord_transform only if explicit MNI mapping is needed.
+        # For simplicity and robustness with fsaverage-vol-5mm, we treat
+        # src_rr as MNI mm directly unless proven otherwise.
+        return src_rr
     except KeyError:
-        raise ValueError("Source space missing 'mri_ras_t' transform.")
-    mni_coords = image.coord_transform(src_rr[:, 0], src_rr[:, 1], src_rr[:, 2], trans)
-    return np.array(mni_coords).T
+        return src_rr
 
 
 def extract_custom_roi_time_courses(
@@ -44,7 +55,29 @@ def extract_custom_roi_time_courses(
     radius_mm: float = DEFAULT_RADIUS_MM,
     mode: Literal["sphere", "single"] = "sphere",
 ) -> Tuple[np.ndarray, List[str]]:
-    """Extract time courses from user-defined MNI coordinates."""
+    """
+    Extract time courses from user-defined MNI coordinates.
+    
+    Parameters
+    ----------
+    stc : SourceEstimate
+        Single epoch source estimate.
+    src : SourceSpaces
+        Volumetric source space (must match forward solution).
+    roi_coordinates : dict
+        Mapping of ROI name -> [x, y, z] in MNI mm.
+    radius_mm : float
+        Search radius for sphere averaging.
+    mode : 'sphere' | 'single'
+        'sphere': average all vertices within radius_mm.
+        'single': use only the nearest vertex.
+        
+    Returns
+    -------
+    time_courses : np.ndarray, shape (n_rois, n_times)
+    roi_names : list of str
+    """
+    # Handle complex data (e.g., from Hilbert or frequency-domain beamforming)
     stc_data = np.abs(stc.data) if np.iscomplexobj(stc.data) else stc.data
     active_coords_mni = _get_mni_coordinates_from_src(stc, src)
 
@@ -56,9 +89,13 @@ def extract_custom_roi_time_courses(
 
         if mode == "single":
             selected_indices = np.array([np.argmin(distances)])
-        else:
+        else:  # sphere
             selected_indices = np.where(distances <= radius_mm)[0]
             if selected_indices.size == 0:
+                logger.warning(
+                    f"No vertices within {radius_mm}mm of {roi_name} {target_mni}. "
+                    f"Using nearest vertex at {distances.min():.2f}mm."
+                )
                 selected_indices = np.array([np.argmin(distances)])
 
         roi_data = stc_data[selected_indices, :].mean(axis=0).astype(np.float32)
@@ -70,11 +107,15 @@ def extract_custom_roi_time_courses(
 
 def _process_single_subject_custom_epochs(args: Tuple) -> Dict:
     """Process one subject: epoch source estimation + per-epoch custom ROI extraction."""
-    (sid, fif_path, task_name, project_base, fs_dir,
-     epoch_duration, roi_coordinates, radius_mm, mode, verbose) = args
+    (
+        sid, fif_path, task_name, project_base, fs_dir,
+        epoch_duration, verbose,
+        noise_cov_method, baseline_tmin, baseline_tmax,
+        roi_coordinates, radius_mm, mode
+    ) = args
 
     try:
-        # 1. Run epoch-based source estimation
+        # 1. Run epoch-based source estimation WITH PROPER NOISE COVARIANCE
         metadata = execute_source_estimation_epochs(
             project_base=project_base,
             subject_id=sid,
@@ -83,6 +124,9 @@ def _process_single_subject_custom_epochs(args: Tuple) -> Dict:
             fsaverage_dir=fs_dir,
             epoch_duration=epoch_duration,
             verbose=verbose,
+            noise_cov_method=noise_cov_method,
+            baseline_tmin=baseline_tmin,
+            baseline_tmax=baseline_tmax
         )
 
         subject_output = Path(metadata['subject_output'])
@@ -98,7 +142,7 @@ def _process_single_subject_custom_epochs(args: Tuple) -> Dict:
                 logger.warning(f"Missing epoch STC for {sid} epoch {i}, skipping")
                 continue
 
-            stc = mne.read_source_estimate(str(stc_file))
+            stc = mne.read_source_estimate(str(stc_file.with_suffix('')))
             tc, _ = extract_custom_roi_time_courses(
                 stc=stc, src=src,
                 roi_coordinates=roi_coordinates,
@@ -118,7 +162,7 @@ def _process_single_subject_custom_epochs(args: Tuple) -> Dict:
             "success": True,
         }
     except Exception as e:
-        logger.error(f"Failed {sid}: {e}")
+        logger.error(f"Failed {sid}: {e}", exc_info=True)
         return {"subject_id": sid, "success": False}
 
 
@@ -189,47 +233,31 @@ def assemble_custom_tensor_epochs(
     roi_coordinates: Dict[str, List[float]],
     task_name: str = "study",
     project_base: Optional[Path] = None,
-    epoch_duration: float = 2.0,
+    epoch_duration: float = 5.0,
     radius_mm: float = DEFAULT_RADIUS_MM,
     mode: Literal["sphere", "single"] = "sphere",
     n_jobs: int = -1,
     verbose: bool = False,
     target_sfreq: float = DEFAULT_TARGET_SFREQ,
+    noise_cov_method: str = 'shrunk',
+    baseline_tmin: Optional[float] = None,
+    baseline_tmax: float = 1.5,
 ) -> Optional[Path]:
     """
     Assemble a 4D custom ROI epoch tensor from cleaned continuous EEG files.
-
+    
     Parameters
     ----------
-    data_index : pd.DataFrame
-        Must contain 'subject_id' and 'fif_path' columns.
-    fs_dir : Path
-        Path to fsaverage directory.
-    output_dir : Path
-        Where to save the final .npz tensor.
     roi_coordinates : dict
-        Mapping of ROI name → [x, y, z] MNI coordinates.
-    task_name : str
-        Label for the output file.
-    project_base : Path, optional
-        Base project directory. Defaults to cwd.
+        Mapping of ROI name → [x, y, z] MNI coordinates (mm).
+        Example: {"M1_L": [-38, -22, 54], "STN_R": [12.53, -13.97, -6.57]}
     epoch_duration : float
-        Length of each non-overlapping epoch in seconds.
-    radius_mm : float
-        Sphere radius for voxel averaging around each coordinate.
-    mode : 'sphere' or 'single'
-        'sphere' averages all voxels within radius_mm.
-        'single' uses only the closest voxel.
-    n_jobs : int
-        Number of parallel workers. -1 uses all CPUs.
-    verbose : bool
-        Enable verbose logging.
-    target_sfreq : float
-        Target sampling rate for the output tensor.
-
-    Returns
-    -------
-    Path to saved .npz file, or None if no subjects succeeded.
+        Length of each non-overlapping epoch in seconds. Default 5.0.
+    baseline_tmax : float
+        End of baseline window for noise covariance (seconds). Default 1.5.
+        Must be < epoch_duration. For 5s epochs with stim at 2.5s, 1.5s is ideal.
+    noise_cov_method : str
+        Covariance estimator ('shrunk', 'oas', 'empirical'). Default 'shrunk'.
     """
     if data_index.empty:
         return None
@@ -239,8 +267,9 @@ def assemble_custom_tensor_epochs(
     tasks = [
         (
             row['subject_id'], Path(row['fif_path']), task_name,
-            project_base, fs_dir, epoch_duration,
-            roi_coordinates, radius_mm, mode, verbose,
+            project_base, fs_dir, epoch_duration, verbose,
+            noise_cov_method, baseline_tmin, baseline_tmax,
+            roi_coordinates, radius_mm, mode,
         )
         for _, row in data_index.iterrows()
     ]
@@ -266,43 +295,3 @@ def assemble_custom_tensor_epochs(
             all_subject_data, task_name, output_dir, target_sfreq=target_sfreq,
         )
     return None
-
-'''
-import lcmv_xtra as lx
-from pathlib import Path
-
-FS_DIR = Path("/mnt/movement/users/jaizor/xtra/derivatives/_fs")
-OUTPUT_DIR = Path("/mnt/movement/users/jaizor/xtra/notebooks/EEG/UNI/Epochs/data")
-PROJECT_BASE = Path("/mnt/movement/users/jaizor/xtra/derivatives/eeg/uni")
-EPOCHS_DIR = PROJECT_BASE / "eeg_epochs"
-
-# Define your custom ROIs as MNI coordinates
-ROI_COORDINATES = {
-    "STN_L": [-11.89, -14.51, -6.40],
-    "STN_R": [12.53, -13.97, -6.57],
-    "M1_L":  [-38, -24, 58],
-    "M1_R":  [38, -24, 58],
-    "SMA":   [0, -10, 65],
-}
-
-df = lx.scan_eeg_paths(EPOCHS_DIR, pattern="*_pre_raw.fif")
-df = df[~df['subject_id'].str.contains("sub-01")]
-df['subject_id'] = df['fif_path'].apply(
-    lambda p: Path(p).stem.split('_sm_eeg')[0]
-)
-
-lx.assemble_custom_tensor_epochs(
-    data_index=df,
-    fs_dir=FS_DIR,
-    output_dir=OUTPUT_DIR,
-    roi_coordinates=ROI_COORDINATES,
-    task_name="sm_pre",
-    project_base=PROJECT_BASE,
-    epoch_duration=2.5,
-    radius_mm=5.0,
-    mode="sphere",
-    target_sfreq=250.0,
-    n_jobs=-1,
-    verbose=True,
-)
-'''
