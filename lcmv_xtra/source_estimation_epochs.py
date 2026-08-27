@@ -150,6 +150,8 @@ def lcmv_beamformer_epochs(
     noise_cov_method: str = 'shrunk',
     baseline_tmin: Optional[float] = None,
     baseline_tmax: float = 0.1,
+    data_cov_tmin: Optional[float] = None,
+    data_cov_tmax: Optional[float] = None,
     use_autoreject: bool = False,
     use_epoched_ica: bool = False,
 ) -> Dict:
@@ -157,8 +159,8 @@ def lcmv_beamformer_epochs(
     Run epoch-based LCMV source estimation with proper noise/data covariance separation.
 
     Cuts continuous data into non-overlapping epochs, computes separate noise
-    (from baseline) and data (full epoch) covariances, and applies whitened
-    LCMV filters via apply_lcmv_epochs.
+    (from baseline) and data covariances, and applies whitened LCMV filters
+    via apply_lcmv_epochs.
 
     Parameters
     ----------
@@ -171,6 +173,13 @@ def lcmv_beamformer_epochs(
     baseline_tmax : float
         End of baseline window for noise covariance (seconds relative to epoch tmin=0).
         Must be < epoch_duration.
+    data_cov_tmin : float | None
+        Start of data covariance window (seconds relative to epoch tmin=0).
+        None defaults to 0.0 (full epoch start).
+    data_cov_tmax : float | None
+        End of data covariance window (seconds relative to epoch tmin=0).
+        None defaults to epoch tmax (full epoch end). Set to restrict the
+        data covariance to a specific interval (e.g., movement execution period).
     use_autoreject : bool
         If True, apply AutoReject for epoch-level artifact rejection before
         covariance estimation. Requires ``autoreject`` package. Default False.
@@ -325,9 +334,25 @@ def lcmv_beamformer_epochs(
         method=noise_cov_method, rank=None, n_jobs=n_jobs, verbose=False
     )
 
-    log.info("Computing DATA covariance from full epochs using method='oas'...")
+    # Resolve data covariance window (defaults to full epoch)
+    dc_tmin = data_cov_tmin if data_cov_tmin is not None else 0.0
+    dc_tmax = data_cov_tmax if data_cov_tmax is not None else tmax
+
+    if dc_tmin >= dc_tmax:
+        raise ValueError(
+            f"data_cov_tmin ({dc_tmin}s) must be < data_cov_tmax ({dc_tmax}s)"
+        )
+    if dc_tmax > tmax + (1.0 / sfreq):
+        raise ValueError(
+            f"data_cov_tmax ({dc_tmax}s) exceeds epoch tmax ({tmax:.3f}s)"
+        )
+
+    log.info(
+        f"Computing DATA covariance from window [{dc_tmin:.3f}, {dc_tmax:.3f}]s "
+        f"using method='oas'..."
+    )
     data_cov = mne.compute_covariance(
-        epochs_eeg, tmin=0.0, tmax=tmax,
+        epochs_eeg, tmin=dc_tmin, tmax=dc_tmax,
         method='oas', rank=None, n_jobs=n_jobs, verbose=False
     )
 
@@ -375,6 +400,7 @@ def lcmv_beamformer_epochs(
         'coreg_mean_error_mm': float(coreg_errors['mean']),
         'regularization': reg,
         'data_covariance_method': 'epoch_averaged_oas',
+        'data_covariance_window': [float(dc_tmin), float(dc_tmax)],
         'noise_covariance_method': noise_cov_method,
         'noise_baseline_window': [float(noise_tmin), float(baseline_tmax)],
         'data_rank': data_rank,
@@ -407,6 +433,8 @@ def execute_source_estimation_epochs(
     noise_cov_method: str = 'shrunk',
     baseline_tmin: Optional[float] = None,
     baseline_tmax: float = 0.1,
+    data_cov_tmin: Optional[float] = None,
+    data_cov_tmax: Optional[float] = None,
     use_autoreject: bool = False,
     use_epoched_ica: bool = False,
 ) -> Dict:
@@ -433,6 +461,8 @@ def execute_source_estimation_epochs(
         noise_cov_method=noise_cov_method,
         baseline_tmin=baseline_tmin,
         baseline_tmax=baseline_tmax,
+        data_cov_tmin=data_cov_tmin,
+        data_cov_tmax=data_cov_tmax,
         use_autoreject=use_autoreject,
         use_epoched_ica=use_epoched_ica,
     )
