@@ -146,14 +146,29 @@ def lcmv_beamformer_epochs(
     epoch_duration: float = 2.0,
     reg: float = 0.05,
     n_jobs: int = 1,
-    verbose: bool = False
+    verbose: bool = False,
+    noise_cov_method: str = 'shrunk',
+    baseline_tmin: Optional[float] = None,
+    baseline_tmax: float = 0.1
 ) -> Dict:
     """
-    Run purely epoch-based LCMV source estimation.
-    
-    Cuts continuous (concatenated) data into non-overlapping epochs,
-    computes covariance properly across epochs (not on continuous trace),
-    and applies filters using apply_lcmv_epochs.
+    Run epoch-based LCMV source estimation with proper noise/data covariance separation.
+
+    Cuts continuous data into non-overlapping epochs, computes separate noise
+    (from baseline) and data (full epoch) covariances, and applies whitened
+    LCMV filters via apply_lcmv_epochs.
+
+    Parameters
+    ----------
+    noise_cov_method : str
+        Estimator for noise covariance ('shrunk', 'oas', 'empirical').
+        'shrunk' (Ledoit-Wolf) is recommended for short baseline windows.
+    baseline_tmin : float | None
+        Start of baseline window for noise covariance (seconds relative to epoch tmin=0).
+        None defaults to 0.0 (epoch onset).
+    baseline_tmax : float
+        End of baseline window for noise covariance (seconds relative to epoch tmin=0).
+        Must be < epoch_duration.
     """
     fsaverage_dir = Path(fsaverage_dir)
     output_dir = Path(output_dir)
@@ -163,6 +178,17 @@ def lcmv_beamformer_epochs(
     log.info(f"{'='*60}")
     log.info(f"LCMV Epoch Source Estimation: {subject_id} - {task}")
     log.info(f"{'='*60}")
+
+    # Validate baseline window
+    if baseline_tmax >= epoch_duration:
+        raise ValueError(
+            f"baseline_tmax ({baseline_tmax}s) must be < epoch_duration ({epoch_duration}s)"
+        )
+    noise_tmin = baseline_tmin if baseline_tmin is not None else 0.0
+    if noise_tmin >= baseline_tmax:
+        raise ValueError(
+            f"baseline_tmin ({noise_tmin}s) must be < baseline_tmax ({baseline_tmax}s)"
+        )
 
     # 1. Coregistration & Forward (computed once on full info)
     bem_file, src_file = validate_fsaverage(fsaverage_dir)
@@ -193,25 +219,47 @@ def lcmv_beamformer_epochs(
     if len(epochs) == 0:
         raise RuntimeError("No epochs created. Check epoch_duration vs data length.")
 
-    # 3. Compute covariance PROPERLY on epochs (avoids concatenation boundary artifacts)
-    log.info("Computing covariance from epochs (per-epoch averaging)...")
-
-
+    # 3. Compute SEPARATE noise and data covariances
     epochs_eeg = epochs.copy().pick('eeg')
-    cov = mne.compute_covariance(
-    epochs_eeg, method='oas', rank=None, n_jobs=n_jobs, verbose=False
+
+    # Noise covariance from baseline period within each epoch
+    log.info(
+        f"Computing NOISE covariance from baseline [{noise_tmin:.3f}, {baseline_tmax:.3f}]s "
+        f"using method='{noise_cov_method}'..."
+    )
+    noise_cov = mne.compute_covariance(
+        epochs_eeg, tmin=noise_tmin, tmax=baseline_tmax,
+        method=noise_cov_method, rank=None, n_jobs=n_jobs, verbose=False
     )
 
+    # Data covariance from full epoch (signal + noise)
+    log.info("Computing DATA covariance from full epochs using method='oas'...")
+    data_cov = mne.compute_covariance(
+        epochs_eeg, tmin=0.0, tmax=tmax,
+        method='oas', rank=None, n_jobs=n_jobs, verbose=False
+    )
 
-    # 4. Make LCMV filters
-    log.info("Computing LCMV filters...")
+    # Log rank information for debugging rank mismatches
+    data_rank = mne.compute_rank(data_cov, info=epochs_eeg.info)
+    noise_rank = mne.compute_rank(noise_cov, info=epochs_eeg.info)
+    log.info(f"Data covariance rank: {data_rank}")
+    log.info(f"Noise covariance rank: {noise_rank}")
+
+    # 4. Make LCMV filters with proper noise covariance whitening
+    log.info("Computing LCMV filters with separate noise/data covariance...")
     filters = mne.beamformer.make_lcmv(
-        info=epochs.info, forward=fwd, data_cov=cov, noise_cov=cov, reg=reg,
-        pick_ori='max-power', weight_norm='unit-noise-gain',
-        reduce_rank=True, rank=None, verbose=False
+        info=epochs.info, forward=fwd,
+        data_cov=data_cov,
+        noise_cov=noise_cov,
+        reg=reg,
+        pick_ori='max-power',
+        weight_norm='unit-noise-gain',
+        reduce_rank=True,
+        rank=None,
+        verbose=False
     )
 
-    # 5. Apply LCMV to epochs
+    # 5. Apply LCMV to epochs (whitening handled internally via filters['whitener'])
     log.info("Applying LCMV beamformer to epochs...")
     stcs: List[mne.SourceEstimate] = mne.beamformer.apply_lcmv_epochs(
         epochs=epochs, filters=filters
@@ -223,7 +271,7 @@ def lcmv_beamformer_epochs(
         stc_file = output_dir / f'source_estimate_LCMV_epoch_{i:03d}.h5'
         stc.save(stc_file, ftype='h5', overwrite=True)
 
-    # Metadata
+    # Metadata with noise covariance details
     metadata = {
         'subject_id': subject_id,
         'task': task,
@@ -234,7 +282,12 @@ def lcmv_beamformer_epochs(
         'n_timepoints_per_epoch': int(stcs[0].data.shape[1]),
         'coreg_mean_error_mm': float(coreg_errors['mean']),
         'regularization': reg,
-        'covariance_method': 'epoch_averaged_oas',
+        'data_covariance_method': 'epoch_averaged_oas',
+        'noise_covariance_method': noise_cov_method,
+        'noise_baseline_window': [float(noise_tmin), float(baseline_tmax)],
+        'data_rank': data_rank,
+        'noise_rank': noise_rank,
+        'weight_normalization': 'unit-noise-gain',
         'subject_output': str(output_dir),
         'fsaverage_dir': str(fsaverage_dir)
     }
@@ -255,7 +308,10 @@ def execute_source_estimation_epochs(
     epoch_duration: float = 2.0,
     reg: float = 0.05,
     n_jobs: int = 1,
-    verbose: bool = False
+    verbose: bool = False,
+    noise_cov_method: str = 'shrunk',
+    baseline_tmin: Optional[float] = None,
+    baseline_tmax: float = 0.1
 ) -> Dict:
     """High-level orchestrator for epoch-based LCMV source estimation."""
     project_base = Path(project_base)
@@ -276,8 +332,12 @@ def execute_source_estimation_epochs(
     return lcmv_beamformer_epochs(
         raw=raw, ch_pos=ch_pos, fsaverage_dir=fsaverage_dir, output_dir=output_dir,
         subject_id=subject_id, task=task, epoch_duration=epoch_duration,
-        reg=reg, n_jobs=n_jobs, verbose=verbose
+        reg=reg, n_jobs=n_jobs, verbose=verbose,
+        noise_cov_method=noise_cov_method,
+        baseline_tmin=baseline_tmin,
+        baseline_tmax=baseline_tmax
     )
+
 
 '''
 import lcmv_xtra as lx
@@ -287,16 +347,19 @@ from pathlib import Path
 PROJECT_BASE = Path("/path/to/project")
 FS_DIR = Path("/path/to/fsaverage")
 
-# Run epoch-based source estimation with 2-second non-overlapping windows
+# Run epoch-based source estimation with proper noise covariance
 metadata = lx.execute_source_estimation_epochs(
     project_base=PROJECT_BASE,
     subject_id="sub-01",
     task="rest",
     ica_file_path="sub-01/ses-01/eeg/sub-01_rest_cleaned.fif",
     fsaverage_dir=FS_DIR,
-    epoch_duration=2.0,   # ← Specify epoch length here (seconds)
+    epoch_duration=2.0,
     reg=0.05,
     n_jobs=1,
-    verbose=True
+    verbose=True,
+    noise_cov_method='shrunk',     # Ledoit-Wolf shrinkage for short baselines
+    baseline_tmin=None,            # Baseline starts at epoch onset (0.0s)
+    baseline_tmax=0.1              # 100ms baseline window for noise estimation
 )
 '''
