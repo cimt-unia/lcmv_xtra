@@ -46,10 +46,14 @@ def scan_eeg_paths(root_dir: Path, pattern: str = "*_c_eeg_mkit_cleaned.fif") ->
 
 def _process_single_subject_epochs(args: Tuple) -> Dict:
     """Process one subject: epoch source estimation + per-epoch atlas extraction."""
-    sid, fif_path, task_name, project_base, fs_dir, epoch_duration, verbose = args
+    (
+        sid, fif_path, task_name, project_base, fs_dir,
+        epoch_duration, verbose,
+        noise_cov_method, baseline_tmin, baseline_tmax
+    ) = args
     
     try:
-        # 1. Run epoch-based source estimation
+        # 1. Run epoch-based source estimation with proper noise covariance
         metadata = execute_source_estimation_epochs(
             project_base=project_base,
             subject_id=sid,
@@ -57,15 +61,16 @@ def _process_single_subject_epochs(args: Tuple) -> Dict:
             ica_file_path=fif_path,
             fsaverage_dir=fs_dir,
             epoch_duration=epoch_duration,
-            verbose=verbose
+            verbose=verbose,
+            noise_cov_method=noise_cov_method,
+            baseline_tmin=baseline_tmin,
+            baseline_tmax=baseline_tmax
         )
         
         subject_output = Path(metadata['subject_output'])
         n_epochs = metadata['n_epochs']
         
         # 2. Extract time courses PER EPOCH
-        # cimt_extraction reads STC files from the output directory
-        # We need to extract from each epoch STC individually
         epoch_time_courses = []
         for i in range(n_epochs):
             stc_file = subject_output / f'source_estimate_LCMV_epoch_{i:03d}.h5'
@@ -77,7 +82,7 @@ def _process_single_subject_epochs(args: Tuple) -> Dict:
                 subject_output_dir=subject_output,
                 fsaverage_dir=fs_dir,
                 stc_filename=f'source_estimate_LCMV_epoch_{i:03d}.h5',
-                verbose=False  # Suppress per-epoch logging
+                verbose=False
             )
             epoch_time_courses.append(tc)  # Shape: (n_rois, time_per_epoch)
         
@@ -86,7 +91,7 @@ def _process_single_subject_epochs(args: Tuple) -> Dict:
             
         return {
             "subject_id": sid,
-            "epoch_time_courses": np.stack(epoch_time_courses, axis=0),  # (n_epochs, n_rois, time)
+            "epoch_time_courses": np.stack(epoch_time_courses, axis=0),
             "sfreq": metadata['sfreq_hz'],
             "n_epochs": len(epoch_time_courses),
             "success": True
@@ -169,7 +174,10 @@ def assemble_tensor_epochs(
     epoch_duration: float = 2.0,
     n_jobs: int = -1,
     verbose: bool = False,
-    target_sfreq: float = 250.0
+    target_sfreq: float = 250.0,
+    noise_cov_method: str = 'shrunk',
+    baseline_tmin: Optional[float] = None,
+    baseline_tmax: float = 0.1
 ) -> Optional[Path]:
     """
     Assemble a 4D epoch tensor from cleaned continuous EEG files.
@@ -194,6 +202,15 @@ def assemble_tensor_epochs(
         Enable verbose logging.
     target_sfreq : float
         Target sampling rate for the output tensor.
+    noise_cov_method : str
+        Estimator for noise covariance ('shrunk', 'oas', 'empirical').
+        Passed to execute_source_estimation_epochs. Default 'shrunk'.
+    baseline_tmin : float | None
+        Start of baseline window for noise cov (seconds relative to epoch onset).
+        None defaults to 0.0. Passed to execute_source_estimation_epochs.
+    baseline_tmax : float
+        End of baseline window for noise cov (seconds relative to epoch onset).
+        Must be < epoch_duration. Default 0.1.
         
     Returns
     -------
@@ -212,7 +229,10 @@ def assemble_tensor_epochs(
             project_base, 
             fs_dir, 
             epoch_duration,
-            verbose
+            verbose,
+            noise_cov_method,
+            baseline_tmin,
+            baseline_tmax
         )
         for _, row in data_index.iterrows()
     ]
@@ -239,6 +259,7 @@ def assemble_tensor_epochs(
         )
     return None
 
+
 '''
 import lcmv_xtra as lx
 from pathlib import Path
@@ -248,7 +269,7 @@ OUTPUT_DIR = Path("/path/to/output")
 PROJECT_BASE = Path("/path/to/project")
 CLEAN_DIR = Path("/path/to/cleaned/files")
 
-# Scan and assemble with 2-second epochs
+# Scan and assemble with proper noise covariance separation
 df = lx.scan_eeg_paths(CLEAN_DIR, pattern="*_resting_cleaned.fif")
 lx.assemble_tensor_epochs(
     data_index=df,
@@ -256,9 +277,12 @@ lx.assemble_tensor_epochs(
     output_dir=OUTPUT_DIR,
     task_name="resting",
     project_base=PROJECT_BASE,
-    epoch_duration=2.0,    # ← Epoch length in seconds
+    epoch_duration=2.0,
     target_sfreq=250.0,
     n_jobs=-1,
-    verbose=True
+    verbose=True,
+    noise_cov_method='shrunk',     # Ledoit-Wolf for short baselines
+    baseline_tmin=None,            # Baseline starts at epoch onset
+    baseline_tmax=0.1              # 100ms baseline for noise estimation
 )
 '''
