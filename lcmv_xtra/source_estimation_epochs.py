@@ -149,7 +149,9 @@ def lcmv_beamformer_epochs(
     verbose: bool = False,
     noise_cov_method: str = 'shrunk',
     baseline_tmin: Optional[float] = None,
-    baseline_tmax: float = 0.1
+    baseline_tmax: float = 0.1,
+    use_autoreject: bool = False,
+    use_epoched_ica: bool = False,
 ) -> Dict:
     """
     Run epoch-based LCMV source estimation with proper noise/data covariance separation.
@@ -169,6 +171,13 @@ def lcmv_beamformer_epochs(
     baseline_tmax : float
         End of baseline window for noise covariance (seconds relative to epoch tmin=0).
         Must be < epoch_duration.
+    use_autoreject : bool
+        If True, apply AutoReject for epoch-level artifact rejection before
+        covariance estimation. Requires ``autoreject`` package. Default False.
+    use_epoched_ica : bool
+        If True, apply epoched ICA + ICLabel for residual artifact removal
+        before covariance estimation. Requires ``mne_icalabel`` package.
+        Default False.
     """
     fsaverage_dir = Path(fsaverage_dir)
     output_dir = Path(output_dir)
@@ -219,10 +228,94 @@ def lcmv_beamformer_epochs(
     if len(epochs) == 0:
         raise RuntimeError("No epochs created. Check epoch_duration vs data length.")
 
-    # 3. Compute SEPARATE noise and data covariances
-    epochs_eeg = epochs.copy().pick('eeg')
+    # ── STAGE A: Epoch Rejection via AutoReject ──────────────────────────────
+    n_epochs_pre_clean = len(epochs)
+    n_ica_excluded = 0
 
-    # Noise covariance from baseline period within each epoch
+    if use_autoreject:
+        try:
+            from autoreject import AutoReject
+            log.info("Running AutoReject for epoch-level artifact rejection...")
+            ar = AutoReject(
+                random_state=42,
+                n_jobs=min(n_jobs, 4),
+                verbose=False
+            )
+            epochs, reject_log = ar.fit_transform(epochs, return_log=True)
+            n_rejected = reject_log.bad_epochs.sum()
+            log.info(
+                f"AutoReject: rejected {n_rejected}/{n_epochs_pre_clean} epochs, "
+                f"kept {len(epochs)}"
+            )
+            if len(epochs) < 5:
+                raise RuntimeError(
+                    f"Only {len(epochs)} epochs survived AutoReject. "
+                    f"Insufficient for covariance estimation."
+                )
+        except ImportError:
+            log.warning(
+                "autoreject not installed. Skipping epoch rejection. "
+                "Install via: pip install autoreject"
+            )
+        except Exception as e:
+            log.warning(f"AutoReject failed ({e}); proceeding with uncleaned epochs.")
+
+    # ── STAGE B: Epoched ICA + ICLabel ───────────────────────────────────────
+    if use_epoched_ica:
+        try:
+            from mne_icalabel import label_components
+            log.info("Fitting epoched ICA + ICLabel for residual artifact removal...")
+            ica = mne.preprocessing.ICA(
+                n_components=0.96,
+                method='picard',
+                fit_params=dict(ortho=False, extended=True),
+                random_state=42,
+                max_iter='auto'
+            )
+            epochs_eeg_fit = epochs.copy().pick('eeg')
+            ica.fit(epochs_eeg_fit)
+
+            labels_dict = label_components(epochs_eeg_fit, ica, method='iclabel')
+            artifact_types = {
+                'muscle artifact', 'eye blink', 'heart beat',
+                'line noise', 'channel noise'
+            }
+            exclude = [
+                i for i, (label, prob_vec) in enumerate(
+                    zip(labels_dict['labels'], labels_dict['y_pred_proba'])
+                )
+                if label.lower().strip() in artifact_types
+                and np.max(prob_vec) > 0.85
+            ]
+            ica.exclude = sorted(set(exclude))
+            n_ica_excluded = len(ica.exclude)
+
+            if ica.exclude:
+                excluded_labels = [
+                    f"C{idx:02d}:{labels_dict['labels'][idx]}"
+                    for idx in ica.exclude
+                ]
+                log.info(
+                    f"Epoched ICA excluded {n_ica_excluded} components: "
+                    f"{', '.join(excluded_labels[:10])}"
+                    f"{'...' if len(excluded_labels) > 10 else ''}"
+                )
+                epochs = ica.apply(epochs.copy())
+            else:
+                log.info("Epoched ICA found no components exceeding threshold.")
+        except ImportError:
+            log.warning(
+                "mne_icalabel not installed. Skipping epoched ICA. "
+                "Install via: pip install mne-icalabel"
+            )
+        except Exception as e:
+            log.warning(f"Epoched ICA failed ({e}); proceeding without.")
+
+    # Re-pick EEG after cleaning stages may have altered channel structure
+    epochs_eeg = epochs.copy().pick('eeg')
+    log.info(f"Final clean epoch count: {len(epochs)}")
+
+    # 3. Compute SEPARATE noise and data covariances
     log.info(
         f"Computing NOISE covariance from baseline [{noise_tmin:.3f}, {baseline_tmax:.3f}]s "
         f"using method='{noise_cov_method}'..."
@@ -232,14 +325,12 @@ def lcmv_beamformer_epochs(
         method=noise_cov_method, rank=None, n_jobs=n_jobs, verbose=False
     )
 
-    # Data covariance from full epoch (signal + noise)
     log.info("Computing DATA covariance from full epochs using method='oas'...")
     data_cov = mne.compute_covariance(
         epochs_eeg, tmin=0.0, tmax=tmax,
         method='oas', rank=None, n_jobs=n_jobs, verbose=False
     )
 
-    # Log rank information for debugging rank mismatches
     data_rank = mne.compute_rank(data_cov, info=epochs_eeg.info)
     noise_rank = mne.compute_rank(noise_cov, info=epochs_eeg.info)
     log.info(f"Data covariance rank: {data_rank}")
@@ -271,12 +362,13 @@ def lcmv_beamformer_epochs(
         stc_file = output_dir / f'source_estimate_LCMV_epoch_{i:03d}.h5'
         stc.save(stc_file, ftype='h5', overwrite=True)
 
-    # Metadata with noise covariance details
+    # Metadata with noise covariance and cleaning details
     metadata = {
         'subject_id': subject_id,
         'task': task,
         'sfreq_hz': float(sfreq),
         'epoch_duration_sec': float(epoch_duration),
+        'n_epochs_original': n_epochs_pre_clean,
         'n_epochs': len(stcs),
         'n_sources': int(stcs[0].data.shape[0]),
         'n_timepoints_per_epoch': int(stcs[0].data.shape[1]),
@@ -288,6 +380,9 @@ def lcmv_beamformer_epochs(
         'data_rank': data_rank,
         'noise_rank': noise_rank,
         'weight_normalization': 'unit-noise-gain',
+        'use_autoreject': use_autoreject,
+        'use_epoched_ica': use_epoched_ica,
+        'n_ica_components_excluded': n_ica_excluded,
         'subject_output': str(output_dir),
         'fsaverage_dir': str(fsaverage_dir)
     }
@@ -311,7 +406,9 @@ def execute_source_estimation_epochs(
     verbose: bool = False,
     noise_cov_method: str = 'shrunk',
     baseline_tmin: Optional[float] = None,
-    baseline_tmax: float = 0.1
+    baseline_tmax: float = 0.1,
+    use_autoreject: bool = False,
+    use_epoched_ica: bool = False,
 ) -> Dict:
     """High-level orchestrator for epoch-based LCMV source estimation."""
     project_base = Path(project_base)
@@ -335,31 +432,7 @@ def execute_source_estimation_epochs(
         reg=reg, n_jobs=n_jobs, verbose=verbose,
         noise_cov_method=noise_cov_method,
         baseline_tmin=baseline_tmin,
-        baseline_tmax=baseline_tmax
+        baseline_tmax=baseline_tmax,
+        use_autoreject=use_autoreject,
+        use_epoched_ica=use_epoched_ica,
     )
-
-
-'''
-import lcmv_xtra as lx
-from pathlib import Path
-
-# Define your paths
-PROJECT_BASE = Path("/path/to/project")
-FS_DIR = Path("/path/to/fsaverage")
-
-# Run epoch-based source estimation with proper noise covariance
-metadata = lx.execute_source_estimation_epochs(
-    project_base=PROJECT_BASE,
-    subject_id="sub-01",
-    task="rest",
-    ica_file_path="sub-01/ses-01/eeg/sub-01_rest_cleaned.fif",
-    fsaverage_dir=FS_DIR,
-    epoch_duration=2.0,
-    reg=0.05,
-    n_jobs=1,
-    verbose=True,
-    noise_cov_method='shrunk',     # Ledoit-Wolf shrinkage for short baselines
-    baseline_tmin=None,            # Baseline starts at epoch onset (0.0s)
-    baseline_tmax=0.1              # 100ms baseline window for noise estimation
-)
-'''
