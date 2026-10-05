@@ -110,7 +110,7 @@ if __name__ == "__main__":
 
 -   **`notch_freq`**: Must match the local grid (50 Hz EU / 60 Hz US). Using the wrong frequency fails to suppress line noise and introduces artifacts.
 -   **`mad_threshold=20.0`**: Prevents flagging channels with legitimate task-related variance (e.g., motor cortex during movement).
--   **`artifact_threshold=0.80`**: Retains mixed neural/artifact ICA components. Aggressive rejection is deferred to Step 3, where ASR provides spatially informed cleanup.
+-   **`artifact_threshold=0.80`**: Retains mixed neural/artifact ICA components. 
 -   **`drop_channels=["Cz"]`**: Prevents rank deficiency during average referencing. The benign warning (`Requested drop channels not found`) occurs when the standardizer has already renamed `Cz`; this is safe to ignore.
 
 <br>
@@ -142,29 +142,30 @@ TRIMMED_FIF = Path("/derivatives/sub-01/sub-01_trimmed_raw.fif")  # Your trimmed
 GPSC_FILE = Path("/data/montage/ghw280_from_egig.gpsc")
 OUTPUT_DIR = Path("/derivatives/sub-01")
 
-# Region-specific line noise frequency (MUST MATCH STEP 1)
+# Region-specific line noise frequency
 # US/Canada/Japan (60Hz regions): 60.0
 # Europe/UK/Australia/Most of Asia: 50.0
-NOTCH_FREQ: float = 50.0  # ← MUST MATCH STEP 1 VALUE
+
+NOTCH_FREQ: float = 50.0  
 
 # MEEGKit parameters (ASR + STAR + SNS)
 MEEGKIT_PARAMS = {
     "highpass_filter": 1.0,
     "low_pass_filter": 100.0,
-    "notch_filter_freq": NOTCH_FREQ,  # Must match Step 1
+    "notch_filter_freq": NOTCH_FREQ,  
     "mad_threshold": 20.0,
     "min_amplitude_uv": 0.5,
-    "asr_cutoff": 3.5,                # Conservative for task/movement data
+    "asr_cutoff": 3.5,                
     "star_thresh": 2.5,
     "sns_neighbors": 8,
-    "drop_cz": False,                  # Cz already removed in Step 1
+    "drop_cz": False,                  
     "interpolate_bads": True,
     "generate_report": True,
 }
 
 # ICLabel refinement parameters
 ICALABEL_PARAMS = {
-    "mad_threshold": 50.0,             # Higher than Step 1 (refinement pass)
+    "mad_threshold": 50.0,            
     "min_amplitude_uv": 0.5,
     "n_components": 0.99,
     "random_state": 42,
@@ -214,7 +215,7 @@ if __name__ == "__main__":
 ### Key Design Decisions
 
 -   **Input Agnostic**: Accepts any FIF regardless of whether it contains continuous, epoched, or concatenated data.
--   **ASR Calibration**: Automatically selects the cleanest segment from the trimmed data. Always verify the timestamp in logs—task-active segments can contaminate the baseline.
--   **Refined ICLabel**: `mad_threshold=50.0` catches residuals missed by Step 1’s conservative threshold without over-correcting.
--   **No Redundant Cz Removal**: `drop_cz=False` because hardware reference removal is handled exclusively in Step 1.
+-   **ASR Calibration**: Automatically selects the cleanest segment from the trimmed data. 
+-   **Refined ICLabel**: `mad_threshold=50.0` catches residuals missed.
+
 
