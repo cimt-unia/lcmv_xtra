@@ -59,6 +59,13 @@ PRECLEAN_PARAMS = {
     "notch_freq": NOTCH_FREQ,     # Line noise removal
 }
 
+
+
+# E52, E42, E43: Left jaw (EMG/mechanical artifact, non-neural)
+# E280, E275, E276: Right jaw (EMG/mechanical artifact, non-neural)
+
+DROP_CHANNELS = ["Cz", "E52", "E42", "E43", "E280", "E275", "E276"]
+
 # ============================================================================
 
 
@@ -91,7 +98,7 @@ def run_preclean() -> None:
     logger.info("Running auto_preclean on full continuous EEG...")
     _ = auto_preclean(
         raw, OUTPUT_DIR, OUTPUT_NAME,
-        drop_channels=["Cz"],  # Remove BEL 280 hardware ref before avg reference
+        drop_channels=DROP_CHANNELS,  
         **PRECLEAN_PARAMS,
     )
 
