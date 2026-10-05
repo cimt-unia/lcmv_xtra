@@ -110,7 +110,7 @@ if __name__ == "__main__":
 
 <br>
 
-## 2. User Trimming / Epoching
+## 2. User Trimming
 
 Use any method or tool you prefer to segment, align, or select your pre-cleaned data. There are no restrictions on how you do this.
 
