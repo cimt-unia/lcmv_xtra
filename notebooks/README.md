@@ -215,3 +215,70 @@ if __name__ == "__main__":
 
 
 
+<br>
+
+## 4. Data Inspection
+
+**Run this after both cleaning steps are complete.** This single script loads both the pre-cleaned and final cleaned FIF files side-by-side for comparative visual QA. This is mandatory to verify that cleaning preserved neural signals and did not introduce artifacts before proceeding to LCMV source reconstruction. Edit only the `USER CONFIGURATION` section at the top.
+
+```python
+""" Comparative visual QA of pre-clean and final clean."""
+from __future__ import annotations
+
+import warnings
+from pathlib import Path
+
+import mne
+
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+
+# ============================================================================
+# USER CONFIGURATION — EDIT THIS SECTION ONLY
+# ============================================================================
+
+PRECLean_FIF = Path("/derivatives/sub-01/sub-01_preclean_raw.fif")
+CLEANED_FIF = Path("/derivatives/sub-01/sub-01_trimmed_raw_eeg.fif")
+
+# ============================================================================
+# END USER CONFIGURATION
+# ============================================================================
+
+
+def _print_summary(label: str, raw: mne.io.Raw) -> None:
+    """Print standardized summary for a Raw object."""
+    print(f"\n{'=' * 60}")
+    print(f"  {label}")
+    print(f"{'=' * 60}")
+    print(f"  Channels: {len(raw.ch_names)}")
+    print(f"  Duration: {raw.n_times / raw.info['sfreq']:.1f}s")
+    print(f"  Highpass: {raw.info.get('highpass', 'N/A')} Hz")
+    print(f"  Lowpass:  {raw.info.get('lowpass', 'N/A')} Hz")
+    print(f"  Bads:     {raw.info['bads']}")
+    print(f"{'=' * 60}")
+
+
+def inspect() -> None:
+    """Load and plot both pre-cleaned and final cleaned data for comparative QA."""
+    if not PRECLEAN_FIF.exists():
+        raise FileNotFoundError(f"Pre-cleaned FIF not found: {PRECLean_FIF}")
+    if not CLEANED_FIF.exists():
+        raise FileNotFoundError(f"Final cleaned FIF not found: {CLEANED_FIF}")
+
+    raw_pre = mne.io.read_raw_fif(str(PRECLEAN_FIF), preload=True, verbose="WARNING")
+    raw_clean = mne.io.read_raw_fif(str(CLEANED_FIF), preload=True, verbose="WARNING")
+
+    _print_summary("PRE-CLEAN (MAD + ICA)", raw_pre)
+    _print_summary("FINAL CLEAN (ASR+STAR+SNS+ICLabel)", raw_clean)
+
+    # Open both plots for side-by-side comparison
+    raw_pre.plot(n_channels=45, title="PRE-CLEAN QA", verbose="WARNING")
+    raw_clean.plot(n_channels=45, title="FINAL CLEAN QA", verbose="WARNING")
+
+
+if __name__ == "__main__":
+    inspect()
+```
+
+
+
+<br>
