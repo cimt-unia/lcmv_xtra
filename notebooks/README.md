@@ -36,7 +36,7 @@ from xeeg_kit.pre_cleaning import auto_preclean
 
 # ============================================================================
 
-# USER CONFIGURATION — EDIT THIS SECTION ONLY
+# USER CONFIGURATION
 
 # Paths
 RAW_EEG_FILE = Path("/data/raw/sub-01_task.edf")
@@ -135,7 +135,7 @@ from xeeg_kit import preprocess_bel_trials
 
 # ============================================================================
 
-# USER CONFIGURATION — EDIT THIS SECTION ONLY
+# USER CONFIGURATION
 
 
 # Paths
@@ -232,7 +232,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 # ============================================================================
 
-# USER CONFIGURATION — EDIT THIS SECTION ONLY
+# USER CONFIGURATION
 
 
 PRECLean_FIF = Path("/derivatives/sub-01/sub-01_preclean_raw.fif")
