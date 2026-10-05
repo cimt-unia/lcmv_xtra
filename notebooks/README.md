@@ -35,8 +35,8 @@ from xeeg_kit.bel_pipeline import DEFAULT_RENAME_MAP
 from xeeg_kit.pre_cleaning import auto_preclean
 
 # ============================================================================
+
 # USER CONFIGURATION — EDIT THIS SECTION ONLY
-# ============================================================================
 
 # Paths
 RAW_EEG_FILE = Path("/data/raw/sub-01_task.edf")
@@ -134,8 +134,9 @@ from typing import Dict
 from xeeg_kit import preprocess_bel_trials
 
 # ============================================================================
+
 # USER CONFIGURATION — EDIT THIS SECTION ONLY
-# ============================================================================
+
 
 # Paths
 TRIMMED_FIF = Path("/derivatives/sub-01/sub-01_trimmed_raw.fif")  # Your trimmed input
@@ -230,8 +231,9 @@ import mne
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 # ============================================================================
+
 # USER CONFIGURATION — EDIT THIS SECTION ONLY
-# ============================================================================
+
 
 PRECLean_FIF = Path("/derivatives/sub-01/sub-01_preclean_raw.fif")
 CLEANED_FIF = Path("/derivatives/sub-01/sub-01_trimmed_raw_eeg.fif")
