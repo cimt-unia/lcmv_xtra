@@ -60,8 +60,7 @@ PRECLEAN_PARAMS = {
 }
 
 # ============================================================================
-# END USER CONFIGURATION
-# ============================================================================
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -175,8 +174,6 @@ ICALABEL_PARAMS = {
 }
 
 # ============================================================================
-# END USER CONFIGURATION
-# ============================================================================
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger(__name__)
@@ -240,8 +237,7 @@ PRECLean_FIF = Path("/derivatives/sub-01/sub-01_preclean_raw.fif")
 CLEANED_FIF = Path("/derivatives/sub-01/sub-01_trimmed_raw_eeg.fif")
 
 # ============================================================================
-# END USER CONFIGURATION
-# ============================================================================
+
 
 
 def _print_summary(label: str, raw: mne.io.Raw) -> None:
@@ -257,26 +253,24 @@ def _print_summary(label: str, raw: mne.io.Raw) -> None:
     print(f"{'=' * 60}")
 
 
-def inspect() -> None:
-    """Load and plot both pre-cleaned and final cleaned data for comparative QA."""
-    if not PRECLEAN_FIF.exists():
-        raise FileNotFoundError(f"Pre-cleaned FIF not found: {PRECLean_FIF}")
-    if not CLEANED_FIF.exists():
-        raise FileNotFoundError(f"Final cleaned FIF not found: {CLEANED_FIF}")
 
-    raw_pre = mne.io.read_raw_fif(str(PRECLEAN_FIF), preload=True, verbose="WARNING")
-    raw_clean = mne.io.read_raw_fif(str(CLEANED_FIF), preload=True, verbose="WARNING")
+"""Load and plot both pre-cleaned and final cleaned data for comparative QA."""
+if not PRECLEAN_FIF.exists():
+    raise FileNotFoundError(f"Pre-cleaned FIF not found: {PRECLean_FIF}")
+if not CLEANED_FIF.exists():
+    raise FileNotFoundError(f"Final cleaned FIF not found: {CLEANED_FIF}")
 
-    _print_summary("PRE-CLEAN (MAD + ICA)", raw_pre)
-    _print_summary("FINAL CLEAN (ASR+STAR+SNS+ICLabel)", raw_clean)
+raw_pre = mne.io.read_raw_fif(str(PRECLEAN_FIF), preload=True, verbose="WARNING")
+raw_clean = mne.io.read_raw_fif(str(CLEANED_FIF), preload=True, verbose="WARNING")
 
-    # Open both plots for side-by-side comparison
-    raw_pre.plot(n_channels=45, title="PRE-CLEAN QA", verbose="WARNING")
-    raw_clean.plot(n_channels=45, title="FINAL CLEAN QA", verbose="WARNING")
+_print_summary("PRE-CLEAN (MAD + ICA)", raw_pre)
+_print_summary("FINAL CLEAN (ASR+STAR+SNS+ICLabel)", raw_clean)
+
+# Open both plots for side-by-side comparison
+raw_pre.plot(n_channels=45, title="PRE-CLEAN QA", verbose="WARNING")
+raw_clean.plot(n_channels=45, title="FINAL CLEAN QA", verbose="WARNING")
 
 
-if __name__ == "__main__":
-    inspect()
 ```
 
 
