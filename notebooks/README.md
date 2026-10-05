@@ -23,7 +23,7 @@ Raw EEG ──► [Step 1: Pre-Clean] ──► [Step 2: Trim/Epoch (User)] ─�
 Runs on the **full continuous recording** before any trimming. This maximizes data available for ICA decomposition and avoids filter edge artifacts at future epoch boundaries. Edit only the `USER CONFIGURATION` section at the top.
 
 ```python
-"""script1_preclean.py: Standardize and conservatively clean continuous EEG."""
+"""Standardize and conservatively clean continuous EEG."""
 from __future__ import annotations
 
 import logging
@@ -125,7 +125,7 @@ Save the resulting continuous .fif file and set its path as TRIMMED_FIF.
 Accepts **any** pre-cleaned FIF produced by the user's trimming step. Applies ASR, STAR, SNS, and a refined ICLabel pass. Edit only the `USER CONFIGURATION` section at the top.
 
 ```python
-"""script3_final_clean.py: MEEGKit + ICLabel on user-trimmed data."""
+"""MEEGKit + ICLabel on user-trimmed data."""
 from __future__ import annotations
 
 import logging
