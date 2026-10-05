@@ -1,6 +1,6 @@
 # EEG Preprocessing Framework for LCMV Source Reconstruction
 
-This guide explains how to prepare BEL 280-channel EEG data for the lcmv_xtra source reconstruction library using xeegkit. The workflow is split into two simple stages with your own processing in between. Each script is standalone and includes its own settings at the top, so no extra configuration files are needed.
+This guide explains how to prepare BEL 280-channel EEG data for the lcmv_xtra source reconstruction library using xeegkit. 
 
 <br>
 
@@ -78,7 +78,10 @@ def run_preclean() -> None:
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    raw = mne.io.read_raw_edf(str(RAW_EEG_FILE), preload=True, verbose="WARNING")
+    raw = mne.io.read_raw_edf(str(RAW_EEG_FILE), preload=True, verbose="WARNING") # EDF TYPE
+    # raw = mne.io.read_raw_egi(str(RAW_EEG_FILE), preload=True) # MFF TYPE
+    # raw = mne.io.read_raw_fifstr(RAW_EEG_FILE, preload=True) # FIF TYPE
+
     logger.info("Loaded: %.1f Hz, %d channels", raw.info["sfreq"], len(raw.ch_names))
 
     standardizer = BELStandardizer(gpsc_file=GPSC_FILE, rename_map=DEFAULT_RENAME_MAP)
