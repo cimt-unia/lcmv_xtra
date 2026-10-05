@@ -106,12 +106,12 @@ if __name__ == "__main__":
     run_preclean()
 ```
 
-### Fixed Parameter Rationale
+### Fixed Parameters
 
 -   **`notch_freq`**: Must match the local grid (50 Hz EU / 60 Hz US). Using the wrong frequency fails to suppress line noise and introduces artifacts.
 -   **`mad_threshold=20.0`**: Prevents flagging channels with legitimate task-related variance (e.g., motor cortex during movement).
 -   **`artifact_threshold=0.80`**: Retains mixed neural/artifact ICA components. 
--   **`drop_channels=["Cz"]`**: Prevents rank deficiency during average referencing. The benign warning (`Requested drop channels not found`) occurs when the standardizer has already renamed `Cz`; this is safe to ignore.
+
 
 <br>
 
@@ -212,10 +212,5 @@ if __name__ == "__main__":
         logger.info("Output: %s → %s", name, path)
 ```
 
-### Key Design Decisions
-
--   **Input Agnostic**: Accepts any FIF regardless of whether it contains continuous, epoched, or concatenated data.
--   **ASR Calibration**: Automatically selects the cleanest segment from the trimmed data. 
--   **Refined ICLabel**: `mad_threshold=50.0` catches residuals missed.
 
 
