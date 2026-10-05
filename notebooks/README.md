@@ -106,18 +106,19 @@ if __name__ == "__main__":
     run_preclean()
 ```
 
-### Fixed Parameters
-
--   **`notch_freq`**: Must match the local grid (50 Hz EU / 60 Hz US). Using the wrong frequency fails to suppress line noise and introduces artifacts.
--   **`mad_threshold=20.0`**: Prevents flagging channels with legitimate task-related variance (e.g., motor cortex during movement).
--   **`artifact_threshold=0.80`**: Retains mixed neural/artifact ICA components. 
 
 
 <br>
 
-## 2. User Trimming/Epoch
+## 2. User Trimming / Epoching
 
-Between Step 1 and Step 3, users perform their own epoching, TTL alignment, concatenation, or segment selection. **No `xeegkit` code is prescribed here.** The only requirement is that the output is a valid MNE-compatible FIF file whose path is set as `TRIMMED_FIF` in Script 3.
+Use any method or tool you prefer to segment, align, or select your pre-cleaned data. There are no restrictions on how you do this.
+
+Critical requirement: If you create epochs, you must concatenate them into a single continuous Raw object before proceeding. The final cleaning pipeline requires a gap-free continuous signal to calibrate ASR and compute spatial filters correctly.
+
+Save the resulting continuous .fif file and set its path as TRIMMED_FIF.
+
+<br>
 
 ## 3.Final Cleaning
 
