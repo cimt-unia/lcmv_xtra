@@ -79,8 +79,10 @@ def run_preclean() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     raw = mne.io.read_raw_edf(str(RAW_EEG_FILE), preload=True, verbose="WARNING") # EDF TYPE
-    # raw = mne.io.read_raw_egi(str(RAW_EEG_FILE), preload=True) # MFF TYPE
-    # raw = mne.io.read_raw_fifstr(RAW_EEG_FILE, preload=True) # FIF TYPE
+
+    # raw = mne.io.read_raw_egi(str(RAW_EEG_FILE), preload=True, verbose="WARNING") # MFF TYPE
+
+    # raw = mne.io.read_raw_fifstr(str(RAW_EEG_FILE), preload=True, verbose="WARNING") # FIF TYPE
 
     logger.info("Loaded: %.1f Hz, %d channels", raw.info["sfreq"], len(raw.ch_names))
 
