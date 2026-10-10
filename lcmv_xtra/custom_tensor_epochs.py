@@ -3,7 +3,7 @@
 Custom MNI Voxel Epoch Tensor Assembly.
 Extracts time courses from user-defined MNI coordinates per epoch,
 producing a 4D tensor: (Subjects, ROIs, Epochs, Time_per_epoch).
-Integrates with source_estimation_epochs.py for proper noise covariance handling.
+Integrates with the refactored source_estimation_epochs.py (accepts pre-epoched data).
 """
 
 import os
@@ -35,17 +35,7 @@ def _get_mni_coordinates_from_src(
     
     # fsaverage vol src vertices are typically in MRI/head frame.
     # For fsaverage, this is effectively MNI-aligned.
-    # If a specific tal_mri.trans exists, apply it; otherwise assume identity.
-    try:
-        trans = src[0]['mri_ras_t']['trans']
-        # Note: This transform maps MRI -> RAS. For fsaverage vol src,
-        # vertices are already in a standardized space. 
-        # We use coord_transform only if explicit MNI mapping is needed.
-        # For simplicity and robustness with fsaverage-vol-5mm, we treat
-        # src_rr as MNI mm directly unless proven otherwise.
-        return src_rr
-    except KeyError:
-        return src_rr
+    return src_rr
 
 
 def extract_custom_roi_time_courses(
@@ -108,31 +98,29 @@ def extract_custom_roi_time_courses(
 def _process_single_subject_custom_epochs(args: Tuple) -> Dict:
     """Process one subject: epoch source estimation + per-epoch custom ROI extraction."""
     (
-        sid, fif_path, task_name, project_base, fs_dir,
-        epoch_duration, verbose,
+        sid, epochs_path, task_name, project_base, fs_dir,
+        verbose, reg,
         noise_cov_method, baseline_tmin, baseline_tmax,
-        data_cov_tmin, data_cov_tmax,
-        use_autoreject, use_epoched_ica,
+        data_cov_tmin, data_cov_tmax, compute_noise_cov,
         roi_coordinates, radius_mm, mode
     ) = args
 
     try:
-        # 1. Run epoch-based source estimation WITH PROPER NOISE COVARIANCE
+        # 1. Run epoch-based source estimation
         metadata = execute_source_estimation_epochs(
             project_base=project_base,
             subject_id=sid,
             task=task_name,
-            ica_file_path=fif_path,
+            epochs_file_path=epochs_path,
             fsaverage_dir=fs_dir,
-            epoch_duration=epoch_duration,
+            reg=reg,
             verbose=verbose,
             noise_cov_method=noise_cov_method,
             baseline_tmin=baseline_tmin,
             baseline_tmax=baseline_tmax,
             data_cov_tmin=data_cov_tmin,
             data_cov_tmax=data_cov_tmax,
-            use_autoreject=use_autoreject,
-            use_epoched_ica=use_epoched_ica,
+            compute_noise_cov=compute_noise_cov,
         )
 
         subject_output = Path(metadata['subject_output'])
@@ -148,7 +136,8 @@ def _process_single_subject_custom_epochs(args: Tuple) -> Dict:
                 logger.warning(f"Missing epoch STC for {sid} epoch {i}, skipping")
                 continue
 
-            stc = mne.read_source_estimate(str(stc_file.with_suffix('')))
+            # MNE handles .h5 extensions natively in recent versions
+            stc = mne.read_source_estimate(str(stc_file))
             tc, _ = extract_custom_roi_time_courses(
                 stc=stc, src=src,
                 roi_coordinates=roi_coordinates,
@@ -239,49 +228,40 @@ def assemble_custom_tensor_epochs(
     roi_coordinates: Dict[str, List[float]],
     task_name: str = "study",
     project_base: Optional[Path] = None,
-    epoch_duration: float = 5.0,
     radius_mm: float = DEFAULT_RADIUS_MM,
     mode: Literal["sphere", "single"] = "sphere",
     n_jobs: int = -1,
     verbose: bool = False,
     target_sfreq: float = DEFAULT_TARGET_SFREQ,
+    reg: float = 0.05,
     noise_cov_method: str = 'shrunk',
     baseline_tmin: Optional[float] = None,
-    baseline_tmax: float = 1.5,
+    baseline_tmax: Optional[float] = 0.0,
     data_cov_tmin: Optional[float] = None,
     data_cov_tmax: Optional[float] = None,
-    use_autoreject: bool = False,
-    use_epoched_ica: bool = False,
+    compute_noise_cov: bool = True,
 ) -> Optional[Path]:
     """
-    Assemble a 4D custom ROI epoch tensor from cleaned continuous EEG files.
+    Assemble a 4D custom ROI epoch tensor from pre-epoched EEG files.
     
     Parameters
     ----------
+    data_index : pd.DataFrame
+        Must contain 'subject_id' and 'epochs_path' columns. 
+        'epochs_path' should be relative to project_base.
     roi_coordinates : dict
         Mapping of ROI name → [x, y, z] MNI coordinates (mm).
         Example: {"M1_L": [-38, -22, 54], "STN_R": [12.53, -13.97, -6.57]}
-    epoch_duration : float
-        Length of each non-overlapping epoch in seconds. Default 5.0.
     baseline_tmax : float
-        End of baseline window for noise covariance (seconds). Default 1.5.
-        Must be < epoch_duration. For 5s epochs with stim at 2.5s, 1.5s is ideal.
+        End of baseline window for noise covariance (seconds). Default 0.0.
     noise_cov_method : str
         Covariance estimator ('shrunk', 'oas', 'empirical'). Default 'shrunk'.
     data_cov_tmin : float | None
-        Start of data covariance window (seconds relative to epoch tmin=0).
-        None defaults to 0.0 (full epoch start).
+        Start of data covariance window. None defaults to epoch tmin.
     data_cov_tmax : float | None
-        End of data covariance window (seconds relative to epoch tmin=0).
-        None defaults to epoch tmax (full epoch end). Set to restrict the
-        data covariance to a specific interval (e.g., movement execution period).
-    use_autoreject : bool
-        If True, apply AutoReject for epoch-level artifact rejection before
-        covariance estimation. Requires ``autoreject`` package. Default False.
-    use_epoched_ica : bool
-        If True, apply epoched ICA + ICLabel for residual artifact removal
-        before covariance estimation. Requires ``mne_icalabel`` package.
-        Default False.
+        End of data covariance window. None defaults to epoch tmax.
+    compute_noise_cov : bool
+        If True, computes baseline noise covariance for whitening. Default True.
     """
     if data_index.empty:
         return None
@@ -290,11 +270,10 @@ def assemble_custom_tensor_epochs(
 
     tasks = [
         (
-            row['subject_id'], Path(row['fif_path']), task_name,
-            project_base, fs_dir, epoch_duration, verbose,
+            row['subject_id'], row['epochs_path'], task_name,
+            project_base, fs_dir, verbose, reg,
             noise_cov_method, baseline_tmin, baseline_tmax,
-            data_cov_tmin, data_cov_tmax,
-            use_autoreject, use_epoched_ica,
+            data_cov_tmin, data_cov_tmax, compute_noise_cov,
             roi_coordinates, radius_mm, mode,
         )
         for _, row in data_index.iterrows()
