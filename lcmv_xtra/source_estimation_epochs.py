@@ -38,60 +38,64 @@ def _setup_logger(subject_id: str, task: str, output_dir: Path, verbose: bool = 
     return logger
 
 
-def load_subject(ica_file_path: Path, gpsc_file_path: Path, 
-                 subject_id: Optional[str] = None, 
-                 logger: Optional[logging.Logger] = None) -> Tuple[mne.io.Raw, Dict]:
-    """Load and preprocess subject data (identical to continuous version)."""
+def load_epochs(epochs_file_path: Path, gpsc_file_path: Path, 
+                subject_id: Optional[str] = None, 
+                logger: Optional[logging.Logger] = None) -> Tuple[mne.Epochs, Dict]:
+    """Load and validate epoched data, ensuring montage and reference are set."""
     log = logger or logging.getLogger(__name__)
-    ica_file = Path(ica_file_path)
+    epochs_file = Path(epochs_file_path)
     gpsc_file = Path(gpsc_file_path)
     
-    if not ica_file.exists():
-        raise FileNotFoundError(f"ICA file not found: {ica_file}")
+    if not epochs_file.exists():
+        raise FileNotFoundError(f"Epochs file not found: {epochs_file}")
     if not gpsc_file.exists():
         raise FileNotFoundError(f"GPSC file not found: {gpsc_file}")
 
-    raw = mne.io.read_raw_fif(ica_file, preload=True)
-    sfreq = raw.info['sfreq']
-    duration_min = raw.n_times / sfreq / 60
+    epochs = mne.read_epochs(epochs_file, preload=True, verbose='WARNING')
+    sfreq = epochs.info['sfreq']
     subject_str = f" ({subject_id})" if subject_id else ""
-    log.info(f"Loaded data: {duration_min:.1f}min @ {sfreq}Hz{subject_str}")
+    log.info(f"Loaded epochs: {len(epochs)} trials, {epochs.tmin:.2f} to {epochs.tmax:.2f}s @ {sfreq}Hz{subject_str}")
 
-    existing_channels = set(raw.info['ch_names'])
-    valid_channel_map = {old: new for old, new in _BEL_CHANNEL_MAP.items() if old in existing_channels}
-    if valid_channel_map:
-        raw.rename_channels(valid_channel_map)
-
+    # Parse GPSC to ensure we have fiducials for coregistration
     channels = parse_gpsc(gpsc_file)
     if not channels:
         raise ValueError("No valid channels found in .gpsc file")
     
     gpsc_array = np.array([ch[1:4] for ch in channels])
     mean_pos = np.mean(gpsc_array, axis=0)
-    channels_normalized = [
-        (ch[0], ch[1] - mean_pos[0], ch[2] - mean_pos[1], ch[3] - mean_pos[2]) 
+    ch_pos = {
+        ch[0]: np.array([ch[1] - mean_pos[0], ch[2] - mean_pos[1], ch[3] - mean_pos[2]]) / 1000.0 
         for ch in channels
-    ]
-    ch_pos = {ch[0]: np.array(ch[1:4]) / 1000.0 for ch in channels_normalized}
+    }
     
     missing_fids = [fid for fid in _REQUIRED_FIDUCIALS if fid not in ch_pos]
     if missing_fids:
-        raise ValueError(f"Missing required fiducials: {missing_fids}")
+        raise ValueError(f"Missing required fiducials in GPSC: {missing_fids}")
 
-    montage = mne.channels.make_dig_montage(
-        ch_pos=ch_pos, nasion=ch_pos['FidNz'], lpa=ch_pos['FidT9'], rpa=ch_pos['FidT10'], coord_frame='head'
-    )
-    raw.set_montage(montage, on_missing='warn')
-    raw = raw.pick(['eeg', 'stim'], exclude=raw.info['bads'])
+    # Check if montage is already set
+    if epochs.get_montage() is None:
+        log.info("Montage not found in epochs, applying from GPSC...")
+        existing_channels = set(epochs.info['ch_names'])
+        valid_channel_map = {old: new for old, new in _BEL_CHANNEL_MAP.items() if old in existing_channels}
+        if valid_channel_map:
+            epochs.rename_channels(valid_channel_map)
 
-    has_avg_ref = any(p['desc'] == 'average' for p in raw.info['projs'])
-    if not has_avg_ref:
-        raw.set_eeg_reference('average', projection=True)
-    if not raw.proj:
-        raw.apply_proj()
+        montage = mne.channels.make_dig_montage(
+            ch_pos=ch_pos, nasion=ch_pos['FidNz'], lpa=ch_pos['FidT9'], rpa=ch_pos['FidT10'], coord_frame='head'
+        )
+        epochs.set_montage(montage, on_missing='warn')
+    else:
+        log.info("Montage already present in epochs.")
 
-    log.info("Preprocessing complete")
-    return raw, ch_pos
+    # Ensure average reference is applied if not already
+    has_avg_ref = any(p['desc'] == 'average' for p in epochs.info['projs'])
+    if not has_avg_ref and 'eeg' in epochs:
+        epochs.set_eeg_reference('average', projection=True)
+    if not epochs.proj and 'eeg' in epochs:
+        epochs.apply_proj()
+
+    log.info("Epochs loading and validation complete")
+    return epochs, ch_pos
 
 
 def validate_fsaverage(subjects_dir: Path) -> Tuple[Path, Path]:
@@ -106,13 +110,13 @@ def validate_fsaverage(subjects_dir: Path) -> Tuple[Path, Path]:
     return bem_file, src_file
 
 
-def _run_coregistration(raw: mne.io.Raw, ch_pos: Dict, subject: str, 
+def _run_coregistration(info: mne.Info, ch_pos: Dict, subject: str, 
                         subjects_dir: Path, trans_file: Path, 
                         logger: logging.Logger) -> Tuple[mne.transforms.Transform, Dict]:
     """Run enhanced coregistration with ICP and outlier removal."""
     log = logger or logging.getLogger(__name__)
     coreg = mne.coreg.Coregistration(
-        raw.info, subject=subject, subjects_dir=subjects_dir,
+        info, subject=subject, subjects_dir=subjects_dir,
         fiducials={'nasion': ch_pos['FidNz'], 'lpa': ch_pos['FidT9'], 'rpa': ch_pos['FidT10']}
     )
     coreg.fit_fiducials(verbose=False)
@@ -137,56 +141,28 @@ def _run_coregistration(raw: mne.io.Raw, ch_pos: Dict, subject: str,
 
 
 def lcmv_beamformer_epochs(
-    raw: mne.io.Raw,
+    epochs: mne.Epochs,
     ch_pos: Dict,
     fsaverage_dir: Path,
     output_dir: Path,
     subject_id: str,
     task: str,
-    epoch_duration: float = 2.0,
     reg: float = 0.05,
     n_jobs: int = 1,
     verbose: bool = False,
     noise_cov_method: str = 'shrunk',
     baseline_tmin: Optional[float] = None,
-    baseline_tmax: float = 0.1,
+    baseline_tmax: Optional[float] = 0.0,
     data_cov_tmin: Optional[float] = None,
     data_cov_tmax: Optional[float] = None,
-    use_autoreject: bool = False,
-    use_epoched_ica: bool = False,
+    compute_noise_cov: bool = True,
 ) -> Dict:
     """
-    Run epoch-based LCMV source estimation with proper noise/data covariance separation.
-
-    Cuts continuous data into non-overlapping epochs, computes separate noise
-    (from baseline) and data covariances, and applies whitened LCMV filters
-    via apply_lcmv_epochs.
-
-    Parameters
-    ----------
-    noise_cov_method : str
-        Estimator for noise covariance ('shrunk', 'oas', 'empirical').
-        'shrunk' (Ledoit-Wolf) is recommended for short baseline windows.
-    baseline_tmin : float | None
-        Start of baseline window for noise covariance (seconds relative to epoch tmin=0).
-        None defaults to 0.0 (epoch onset).
-    baseline_tmax : float
-        End of baseline window for noise covariance (seconds relative to epoch tmin=0).
-        Must be < epoch_duration.
-    data_cov_tmin : float | None
-        Start of data covariance window (seconds relative to epoch tmin=0).
-        None defaults to 0.0 (full epoch start).
-    data_cov_tmax : float | None
-        End of data covariance window (seconds relative to epoch tmin=0).
-        None defaults to epoch tmax (full epoch end). Set to restrict the
-        data covariance to a specific interval (e.g., movement execution period).
-    use_autoreject : bool
-        If True, apply AutoReject for epoch-level artifact rejection before
-        covariance estimation. Requires ``autoreject`` package. Default False.
-    use_epoched_ica : bool
-        If True, apply epoched ICA + ICLabel for residual artifact removal
-        before covariance estimation. Requires ``mne_icalabel`` package.
-        Default False.
+    Run epoch-based LCMV source estimation.
+    
+    Accepts pre-defined Epochs, computes data covariance (and optionally noise 
+    covariance) from manually specified time windows, and applies whitened LCMV 
+    filters via apply_lcmv_epochs.
     """
     fsaverage_dir = Path(fsaverage_dir)
     output_dir = Path(output_dir)
@@ -197,187 +173,71 @@ def lcmv_beamformer_epochs(
     log.info(f"LCMV Epoch Source Estimation: {subject_id} - {task}")
     log.info(f"{'='*60}")
 
-    # Validate baseline window
-    if baseline_tmax >= epoch_duration:
-        raise ValueError(
-            f"baseline_tmax ({baseline_tmax}s) must be < epoch_duration ({epoch_duration}s)"
-        )
-    noise_tmin = baseline_tmin if baseline_tmin is not None else 0.0
-    if noise_tmin >= baseline_tmax:
-        raise ValueError(
-            f"baseline_tmin ({noise_tmin}s) must be < baseline_tmax ({baseline_tmax}s)"
-        )
-
-    # 1. Coregistration & Forward (computed once on full info)
+    # 1. Coregistration & Forward 
     bem_file, src_file = validate_fsaverage(fsaverage_dir)
     trans_file = output_dir / 'fsaverage-trans.fif'
-    trans, coreg_errors = _run_coregistration(raw, ch_pos, 'fsaverage', fsaverage_dir, trans_file, log)
+    trans, coreg_errors = _run_coregistration(epochs.info, ch_pos, 'fsaverage', fsaverage_dir, trans_file, log)
     
     src = mne.read_source_spaces(src_file)
     fwd_file = output_dir / 'fsaverage-vol-eeg-fwd.fif'
     bem = mne.read_bem_solution(bem_file)
     fwd = mne.make_forward_solution(
-        raw.info, trans=trans, src=src, bem=bem, eeg=True, mindist=5.0, n_jobs=n_jobs
+        epochs.info, trans=trans, src=src, bem=bem, eeg=True, mindist=5.0, n_jobs=n_jobs
     )
     mne.write_forward_solution(fwd_file, fwd, overwrite=True)
 
-    # 2. Re-epoch the concatenated continuous data
-    sfreq = raw.info['sfreq']
-    log.info(f"Cutting continuous data into {epoch_duration}s non-overlapping epochs...")
-    events = mne.make_fixed_length_events(raw, duration=epoch_duration, overlap=0.0)
-    
-    # tmax is inclusive; subtract 1 sample to get exact epoch_duration
-    tmax = epoch_duration - (1.0 / sfreq)
-    epochs = mne.Epochs(
-        raw, events, event_id=None, tmin=0.0, tmax=tmax,
-        baseline=None, preload=True, proj=True
-    )
-    log.info(f"Created {len(epochs)} epochs.")
-    
+    log.info(f"Using provided epochs: {len(epochs)} trials, {epochs.tmin:.2f}s to {epochs.tmax:.2f}s")
     if len(epochs) == 0:
-        raise RuntimeError("No epochs created. Check epoch_duration vs data length.")
+        raise RuntimeError("No epochs provided or all epochs were dropped.")
 
-    # ── STAGE A: Epoch Rejection via AutoReject ──────────────────────────────
-    n_epochs_pre_clean = len(epochs)
-    n_ica_excluded = 0
-
-    if use_autoreject:
-        try:
-            from autoreject import AutoReject
-            log.info("Running AutoReject for epoch-level artifact rejection...")
-            ar = AutoReject(
-                random_state=42,
-                n_jobs=min(n_jobs, 4),
-                verbose=False
-            )
-            epochs, reject_log = ar.fit_transform(epochs, return_log=True)
-            n_rejected = reject_log.bad_epochs.sum()
-            log.info(
-                f"AutoReject: rejected {n_rejected}/{n_epochs_pre_clean} epochs, "
-                f"kept {len(epochs)}"
-            )
-            if len(epochs) < 5:
-                raise RuntimeError(
-                    f"Only {len(epochs)} epochs survived AutoReject. "
-                    f"Insufficient for covariance estimation."
-                )
-        except ImportError:
-            log.warning(
-                "autoreject not installed. Skipping epoch rejection. "
-                "Install via: pip install autoreject"
-            )
-        except Exception as e:
-            log.warning(f"AutoReject failed ({e}); proceeding with uncleaned epochs.")
-
-    # ── STAGE B: Epoched ICA + ICLabel ───────────────────────────────────────
-    if use_epoched_ica:
-        try:
-            from mne_icalabel import label_components
-            log.info("Fitting epoched ICA + ICLabel for residual artifact removal...")
-            ica = mne.preprocessing.ICA(
-                n_components=0.96,
-                method='picard',
-                fit_params=dict(ortho=False, extended=True),
-                random_state=42,
-                max_iter='auto'
-            )
-            epochs_eeg_fit = epochs.copy().pick('eeg')
-            ica.fit(epochs_eeg_fit)
-
-            labels_dict = label_components(epochs_eeg_fit, ica, method='iclabel')
-            artifact_types = {
-                'muscle artifact', 'eye blink', 'heart beat',
-                'line noise', 'channel noise'
-            }
-            exclude = [
-                i for i, (label, prob_vec) in enumerate(
-                    zip(labels_dict['labels'], labels_dict['y_pred_proba'])
-                )
-                if label.lower().strip() in artifact_types
-                and np.max(prob_vec) > 0.85
-            ]
-            ica.exclude = sorted(set(exclude))
-            n_ica_excluded = len(ica.exclude)
-
-            if ica.exclude:
-                excluded_labels = [
-                    f"C{idx:02d}:{labels_dict['labels'][idx]}"
-                    for idx in ica.exclude
-                ]
-                log.info(
-                    f"Epoched ICA excluded {n_ica_excluded} components: "
-                    f"{', '.join(excluded_labels[:10])}"
-                    f"{'...' if len(excluded_labels) > 10 else ''}"
-                )
-                epochs = ica.apply(epochs.copy())
-            else:
-                log.info("Epoched ICA found no components exceeding threshold.")
-        except ImportError:
-            log.warning(
-                "mne_icalabel not installed. Skipping epoched ICA. "
-                "Install via: pip install mne-icalabel"
-            )
-        except Exception as e:
-            log.warning(f"Epoched ICA failed ({e}); proceeding without.")
-
-    # Re-pick EEG after cleaning stages may have altered channel structure
     epochs_eeg = epochs.copy().pick('eeg')
-    log.info(f"Final clean epoch count: {len(epochs)}")
+    log.info(f"Final epoch count: {len(epochs)}")
 
-    # 3. Compute SEPARATE noise and data covariances
-    log.info(
-        f"Computing NOISE covariance from baseline [{noise_tmin:.3f}, {baseline_tmax:.3f}]s "
-        f"using method='{noise_cov_method}'..."
-    )
-    noise_cov = mne.compute_covariance(
-        epochs_eeg, tmin=noise_tmin, tmax=baseline_tmax,
-        method=noise_cov_method, rank=None, n_jobs=n_jobs, verbose=False
-    )
-
-    # Resolve data covariance window (defaults to full epoch)
-    dc_tmin = data_cov_tmin if data_cov_tmin is not None else 0.0
-    dc_tmax = data_cov_tmax if data_cov_tmax is not None else tmax
-
-    if dc_tmin >= dc_tmax:
-        raise ValueError(
-            f"data_cov_tmin ({dc_tmin}s) must be < data_cov_tmax ({dc_tmax}s)"
-        )
-    if dc_tmax > tmax + (1.0 / sfreq):
-        raise ValueError(
-            f"data_cov_tmax ({dc_tmax}s) exceeds epoch tmax ({tmax:.3f}s)"
-        )
-
-    log.info(
-        f"Computing DATA covariance from window [{dc_tmin:.3f}, {dc_tmax:.3f}]s "
-        f"using method='oas'..."
-    )
+    # 2. Compute DATA Covariance (Manual Window)
+    log.info(f"Computing DATA covariance from window [tmin={data_cov_tmin}, tmax={data_cov_tmax}]s using method='oas'...")
     data_cov = mne.compute_covariance(
-        epochs_eeg, tmin=dc_tmin, tmax=dc_tmax,
+        epochs_eeg, tmin=data_cov_tmin, tmax=data_cov_tmax,
         method='oas', rank=None, n_jobs=n_jobs, verbose=False
     )
-
     data_rank = mne.compute_rank(data_cov, info=epochs_eeg.info)
-    noise_rank = mne.compute_rank(noise_cov, info=epochs_eeg.info)
     log.info(f"Data covariance rank: {data_rank}")
-    log.info(f"Noise covariance rank: {noise_rank}")
 
-    # 4. Make LCMV filters with proper noise covariance whitening
-    log.info("Computing LCMV filters with separate noise/data covariance...")
+    # 3. Compute NOISE Covariance (Optional, Manual Window)
+    noise_cov = None
+    noise_rank = None
+    if compute_noise_cov:
+        log.info(f"Computing NOISE covariance from baseline [tmin={baseline_tmin}, tmax={baseline_tmax}]s using method='{noise_cov_method}'...")
+        noise_cov = mne.compute_covariance(
+            epochs_eeg, tmin=baseline_tmin, tmax=baseline_tmax,
+            method=noise_cov_method, rank=None, n_jobs=n_jobs, verbose=False
+        )
+        noise_rank = mne.compute_rank(noise_cov, info=epochs_eeg.info)
+        log.info(f"Noise covariance rank: {noise_rank}")
+        
+        # MNE Best Practice: Use common covariance for unbiased spatial filters
+        log.info("Computing COMMON covariance (data + noise) for unbiased LCMV filters...")
+        common_cov = data_cov + noise_cov
+    else:
+        log.info("Skipping noise covariance computation. Using data covariance only.")
+        common_cov = data_cov
+
+    # 4. Make LCMV filters
+    log.info("Computing LCMV filters...")
     filters = mne.beamformer.make_lcmv(
         info=epochs.info, forward=fwd,
-        data_cov=data_cov,
-        noise_cov=noise_cov,
-        reg=reg,
-        pick_ori='max-power',
-        weight_norm='unit-noise-gain',
-        reduce_rank=True,
-        rank=None,
+        data_cov=common_cov,      # Uses common_cov to prevent bias
+        noise_cov=noise_cov,      # Whitens data if noise_cov is provided
+        reg=reg, 
+        pick_ori='max-power', 
+        weight_norm='unit-noise-gain', # Mandatory for time-series to fix depth bias
+        reduce_rank=True, 
+        rank=None, 
         verbose=False
     )
 
-    # 5. Apply LCMV to epochs (whitening handled internally via filters['whitener'])
-    log.info("Applying LCMV beamformer to epochs...")
-    stcs: List[mne.SourceEstimate] = mne.beamformer.apply_lcmv_epochs(
+    # 5. Apply LCMV to epochs (Single-Trial Time Series)
+    log.info("Applying LCMV beamformer to single-trial epochs...")
+    stcs: List[mne.VolSourceEstimate] = mne.beamformer.apply_lcmv_epochs(
         epochs=epochs, filters=filters
     )
     
@@ -387,28 +247,28 @@ def lcmv_beamformer_epochs(
         stc_file = output_dir / f'source_estimate_LCMV_epoch_{i:03d}.h5'
         stc.save(stc_file, ftype='h5', overwrite=True)
 
-    # Metadata with noise covariance and cleaning details
+    # Metadata
     metadata = {
         'subject_id': subject_id,
         'task': task,
-        'sfreq_hz': float(sfreq),
-        'epoch_duration_sec': float(epoch_duration),
-        'n_epochs_original': n_epochs_pre_clean,
+        'sfreq_hz': float(epochs.info['sfreq']),
+        'epoch_tmin': float(epochs.tmin),
+        'epoch_tmax': float(epochs.tmax),
         'n_epochs': len(stcs),
         'n_sources': int(stcs[0].data.shape[0]),
         'n_timepoints_per_epoch': int(stcs[0].data.shape[1]),
         'coreg_mean_error_mm': float(coreg_errors['mean']),
         'regularization': reg,
         'data_covariance_method': 'epoch_averaged_oas',
-        'data_covariance_window': [float(dc_tmin), float(dc_tmax)],
-        'noise_covariance_method': noise_cov_method,
-        'noise_baseline_window': [float(noise_tmin), float(baseline_tmax)],
+        'data_covariance_window': [float(data_cov_tmin) if data_cov_tmin is not None else None, 
+                                   float(data_cov_tmax) if data_cov_tmax is not None else None],
+        'compute_noise_covariance': compute_noise_cov,
+        'noise_covariance_method': noise_cov_method if compute_noise_cov else None,
+        'noise_baseline_window': [float(baseline_tmin) if baseline_tmin is not None else None, 
+                                  float(baseline_tmax) if baseline_tmax is not None else None] if compute_noise_cov else None,
         'data_rank': data_rank,
         'noise_rank': noise_rank,
         'weight_normalization': 'unit-noise-gain',
-        'use_autoreject': use_autoreject,
-        'use_epoched_ica': use_epoched_ica,
-        'n_ica_components_excluded': n_ica_excluded,
         'subject_output': str(output_dir),
         'fsaverage_dir': str(fsaverage_dir)
     }
@@ -424,19 +284,17 @@ def execute_source_estimation_epochs(
     project_base: Path,
     subject_id: str,
     task: str,
-    ica_file_path: str,
+    epochs_file_path: str,
     fsaverage_dir: Path,
-    epoch_duration: float = 2.0,
     reg: float = 0.05,
     n_jobs: int = 1,
     verbose: bool = False,
     noise_cov_method: str = 'shrunk',
     baseline_tmin: Optional[float] = None,
-    baseline_tmax: float = 0.1,
+    baseline_tmax: Optional[float] = 0.0,
     data_cov_tmin: Optional[float] = None,
     data_cov_tmax: Optional[float] = None,
-    use_autoreject: bool = False,
-    use_epoched_ica: bool = False,
+    compute_noise_cov: bool = True,
 ) -> Dict:
     """High-level orchestrator for epoch-based LCMV source estimation."""
     project_base = Path(project_base)
@@ -446,23 +304,22 @@ def execute_source_estimation_epochs(
     if not gpsc_full_path.exists():
         raise FileNotFoundError(f"Bundled .gpsc file not found: {gpsc_full_path}")
     
-    ica_full_path = project_base / ica_file_path
+    epochs_full_path = project_base / epochs_file_path
     output_dir = project_base / 'derivatives' / 'lcmv' / f'{subject_id}_{task}_epochs'
 
-    raw, ch_pos = load_subject(
-        ica_file_path=ica_full_path, gpsc_file_path=gpsc_full_path,
+    epochs, ch_pos = load_epochs(
+        epochs_file_path=epochs_full_path, gpsc_file_path=gpsc_full_path,
         subject_id=subject_id, logger=None
     )
     
     return lcmv_beamformer_epochs(
-        raw=raw, ch_pos=ch_pos, fsaverage_dir=fsaverage_dir, output_dir=output_dir,
-        subject_id=subject_id, task=task, epoch_duration=epoch_duration,
+        epochs=epochs, ch_pos=ch_pos, fsaverage_dir=fsaverage_dir, output_dir=output_dir,
+        subject_id=subject_id, task=task, 
         reg=reg, n_jobs=n_jobs, verbose=verbose,
         noise_cov_method=noise_cov_method,
         baseline_tmin=baseline_tmin,
         baseline_tmax=baseline_tmax,
         data_cov_tmin=data_cov_tmin,
         data_cov_tmax=data_cov_tmax,
-        use_autoreject=use_autoreject,
-        use_epoched_ica=use_epoched_ica,
+        compute_noise_cov=compute_noise_cov,
     )
