@@ -158,11 +158,17 @@ def lcmv_beamformer_epochs(
     compute_noise_cov: bool = True,
 ) -> Dict:
     """
-    Run epoch-based LCMV source estimation.
+    Run epoch-based LCMV source estimation for single-trial time series.
     
     Accepts pre-defined Epochs, computes data covariance (and optionally noise 
     covariance) from manually specified time windows, and applies whitened LCMV 
     filters via apply_lcmv_epochs.
+    
+    NOTE: For single-trial time series extraction, data_cov and noise_cov are
+    passed SEPARATELY to make_lcmv. The common_cov addition trick (data + noise)
+    is ONLY valid for source power maps (apply_lcmv_cov), not for time series.
+    Using common_cov with noise_cov for time series causes double-whitening that
+    destroys oscillatory signals like beta ERD.
     """
     fsaverage_dir = Path(fsaverage_dir)
     output_dir = Path(output_dir)
@@ -213,23 +219,24 @@ def lcmv_beamformer_epochs(
         )
         noise_rank = mne.compute_rank(noise_cov, info=epochs_eeg.info)
         log.info(f"Noise covariance rank: {noise_rank}")
-        
-        # MNE Best Practice: Use common covariance for unbiased spatial filters
-        log.info("Computing COMMON covariance (data + noise) for unbiased LCMV filters...")
-        common_cov = data_cov + noise_cov
+        log.info("Noise covariance will be used for spatial whitening (separate from data_cov).")
     else:
         log.info("Skipping noise covariance computation. Using data covariance only.")
-        common_cov = data_cov
 
     # 4. Make LCMV filters
-    log.info("Computing LCMV filters...")
+    # CRITICAL: For single-trial time series (apply_lcmv_epochs), pass data_cov
+    # and noise_cov SEPARATELY. Do NOT add them together.
+    # The common_cov = data_cov + noise_cov trick is ONLY for source power maps
+    # (apply_lcmv_cov) where active/baseline power ratios cancel depth bias.
+    # For time series, adding them causes double-whitening that destroys ERD/ERS.
+    log.info("Computing LCMV filters for single-trial time series extraction...")
     filters = mne.beamformer.make_lcmv(
         info=epochs.info, forward=fwd,
-        data_cov=common_cov,      # Uses common_cov to prevent bias
-        noise_cov=noise_cov,      # Whitens data if noise_cov is provided
+        data_cov=data_cov,      # Defines the signal topography to pass through
+        noise_cov=noise_cov,    # Defines the spatial whitening (baseline noise profile)
         reg=reg, 
         pick_ori='max-power', 
-        weight_norm='unit-noise-gain', # Mandatory for time-series to fix depth bias
+        weight_norm='unit-noise-gain',  # Mandatory for time-series to fix depth bias
         reduce_rank=True, 
         rank=None, 
         verbose=False
@@ -269,6 +276,7 @@ def lcmv_beamformer_epochs(
         'data_rank': data_rank,
         'noise_rank': noise_rank,
         'weight_normalization': 'unit-noise-gain',
+        'covariance_mode': 'separate',  # Explicitly documents that common_cov was NOT used
         'subject_output': str(output_dir),
         'fsaverage_dir': str(fsaverage_dir)
     }
