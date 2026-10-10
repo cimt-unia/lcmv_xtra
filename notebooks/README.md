@@ -1,183 +1,84 @@
-# EEG Preprocessing Framework for LCMV Source Reconstruction
+# High-Density EEG Preprocessing Framework for LCMV Source Reconstruction
 
-This guide explains how to prepare BEL 280-channel EEG data for the lcmv_xtra source reconstruction library using xeegkit. 
+This guide explains how to prepare BEL 280-channel EEG data for the `lcmv_xtra` source reconstruction library using `xeeg_kit` and `autoreject`. 
+
+> **Note on Paths:** This tutorial is designed to be generic. In every code block, locate the `USER CONFIGURATION` section and update the `PROJECT_ROOT` and file paths to match your local directory structure.
 
 <br>
 
 ### Introduction
 
 ```text
-Raw EEG ──► [Step 1: Pre-Clean] ──► [Step 2: Trim/Epoch (User)] ──► [Step 3: Final Clean] ──► Analysis-Ready FIF
+Raw Data ──► [Step 1: Continuous Clean] ──► [Step 2: Visual QA & Interpolation] ──► [Step 3: Epoching] ──► [Step 4: Epoch Repair] ──► Analysis-Ready Epochs
 ```
 
 | Step | Input | Operation | Output |
 | :--- | :--- | :--- | :--- |
-| **1. Pre-Clean** | Raw continuous EEG | Standardize + Conservative ICA | `*_preclean_raw.fif` |
-| **2. Trim/Epoch** | Pre-cleaned FIF | User-defined segmentation | `*_trimmed_raw.fif` |
-| **3. Final Clean** | Trimmed/concatenated FIF | ASR + STAR + SNS + ICLabel | `*_eeg.fif` |
+| **1. Continuous Clean** | Raw Data (EDF, MFF, FIF, etc.) | MEEGKit (ASR+STAR+SNS) + ICLabel | `*_eeg_raw_eeg.fif` |
+| **2. Visual QA & Interp** | Cleaned FIF | Manual bad channel review + Spherical Spline Interpolation | `*_interp_eeg.fif` |
+| **3. Epoching** | Interpolated FIF | Event-aligned segmentation (no baseline correction) | `*_epo.fif` |
+| **4. Epoch Repair** | Raw Epochs | RANSAC (global) + AutoReject (trial-specific) | `*_epo_clean.fif` |
 
 <br>
 
-## 1. Raw Data Pre-Cleaning
+## 1. Continuous EEG Preprocessing
 
-Runs on the **full continuous recording** before any trimming. This maximizes data available for ICA decomposition and avoids filter edge artifacts at future epoch boundaries. Edit only the `USER CONFIGURATION` section at the top.
+Runs the native `xeeg_kit` pipeline on the full continuous recording. This applies ASR (Artifact Subspace Reconstruction), STAR (Sparse Time-Artifact Removal), SNS (Sensor Noise Suppression), and ICLabel. 
+
+**Critical Design Choices:** 
+1. **Universal File Loading:** We use `mne.io.read_raw()`, which automatically detects and routes to the correct parser based on the file extension (EDF, EGI/MFF, FIF, BrainVision, etc.).
+2. **Deferred Interpolation:** `interpolate_bads` is set to `False` in both MEEGKit and ICLabel. This preserves the raw topography of bad channels so you can visually inspect them in Step 2 before committing to spherical spline interpolation.
 
 ```python
-"""Standardize and conservatively clean continuous EEG."""
+"""Continuous EEG Preprocessing using the native xeeg_kit entry point."""
 from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any, Dict
 
 import mne
-from xeeg_kit import BELStandardizer
-from xeeg_kit.bel_pipeline import DEFAULT_RENAME_MAP
-from xeeg_kit.pre_cleaning import auto_preclean
-
-# ============================================================================
-
-# USER CONFIGURATION
-
-# Paths
-RAW_EEG_FILE = Path("/data/raw/sub-01_task.edf")
-GPSC_FILE = Path("/data/montage/ghw280_from_egig.gpsc")
-OUTPUT_DIR = Path("/derivatives/sub-01")
-OUTPUT_NAME = "sub-01_preclean_raw"
-
-# Region-specific line noise frequency
-# US/Canada/Japan (60Hz regions): 60.0
-# Europe/UK/Australia/Most of Asia: 50.0
-NOTCH_FREQ: float = 50.0  # ← SET TO MATCH YOUR ACQUISITION SITE
-
-# Conservative pre-clean parameters
-PRECLEAN_PARAMS = {
-    "mad_threshold": 20.0,        # High → fewer channels flagged
-    "artifact_threshold": 0.80,   # High → fewer ICA components rejected
-    "n_components": 0.99,         # Variance explained for ICA
-    "highpass": 1.0,              # High-pass filter (Hz)
-    "lowpass": 100.0,             # Low-pass filter (Hz)
-    "notch_freq": NOTCH_FREQ,     # Line noise removal
-}
-
-
-
-# E52, E42, E43: Left jaw (EMG/mechanical artifact, non-neural)
-# E280, E275, E276: Right jaw (EMG/mechanical artifact, non-neural)
-
-DROP_CHANNELS = ["Cz", "E52", "E42", "E43", "E280", "E275", "E276"]
-
-# ============================================================================
-
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
-
-
-def run_preclean() -> None:
-    """Load, standardize, and pre-clean full continuous EEG."""
-    logger.info("=" * 70)
-    logger.info("Step 1: Pre-Clean Continuous EEG")
-    logger.info("=" * 70)
-
-    if not RAW_EEG_FILE.exists():
-        raise FileNotFoundError(f"Raw EEG not found: {RAW_EEG_FILE}")
-
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-    raw = mne.io.read_raw_edf(str(RAW_EEG_FILE), preload=True, verbose="WARNING") # EDF TYPE
-
-    # raw = mne.io.read_raw_egi(str(RAW_EEG_FILE), preload=True, verbose="WARNING") # MFF TYPE
-
-    # raw = mne.io.read_raw_fifstr(str(RAW_EEG_FILE), preload=True, verbose="WARNING") # FIF TYPE
-
-    logger.info("Loaded: %.1f Hz, %d channels", raw.info["sfreq"], len(raw.ch_names))
-
-    standardizer = BELStandardizer(gpsc_file=GPSC_FILE, rename_map=DEFAULT_RENAME_MAP)
-    raw = standardizer.standardize(raw)
-
-    logger.info("Running auto_preclean on full continuous EEG...")
-    _ = auto_preclean(
-        raw, OUTPUT_DIR, OUTPUT_NAME,
-        drop_channels=DROP_CHANNELS,  
-        **PRECLEAN_PARAMS,
-    )
-
-    output_path = OUTPUT_DIR / f"{OUTPUT_NAME}.fif"
-    logger.info("Pre-clean complete. Inspect output before trimming.")
-    logger.info("Output: %s", output_path)
-    logger.info("=" * 70)
-
-
-if __name__ == "__main__":
-    run_preclean()
-```
-
-
-
-<br>
-
-## 2. User Trimming
-
-Use any method or tool you prefer to segment, align, or select your pre-cleaned data. There are no restrictions on how you do this.
-
-Critical requirement: If you create epochs, you must concatenate them into a single continuous Raw object before proceeding. The final cleaning pipeline requires a gap-free continuous signal to calibrate ASR and compute spatial filters correctly.
-
-Save the resulting continuous .fif file and set its path as TRIMMED_FIF.
-
-<br>
-
-## 3.Final Cleaning
-
-Accepts **any** pre-cleaned FIF produced by the user's trimming step. Applies ASR, STAR, SNS, and a refined ICLabel pass. Edit only the `USER CONFIGURATION` section at the top.
-
-```python
-"""MEEGKit + ICLabel on user-trimmed data."""
-from __future__ import annotations
-
-import logging
-from pathlib import Path
-from typing import Dict
-
 from xeeg_kit import preprocess_bel_trials
 
 # ============================================================================
+# USER CONFIGURATION (UPDATE THESE PATHS)
+# ============================================================================
 
-# USER CONFIGURATION
+# Define your project root directory
+PROJECT_ROOT = Path("/path/to/your/project")
 
+# Path to your raw data file. 
+# Supports: .edf, .mff (EGI), .fif, .vhdr (BrainVision), .set (EEGLAB), .bdf
+RAW_DATA_PATH = PROJECT_ROOT / "raw_data" / "sub-01_task.edf"
 
-# Paths
-TRIMMED_FIF = Path("/derivatives/sub-01/sub-01_trimmed_raw.fif")  # Your trimmed input
-GPSC_FILE = Path("/data/montage/ghw280_from_egig.gpsc")
-OUTPUT_DIR = Path("/derivatives/sub-01")
+# Output directory for cleaned data and reports
+OUTPUT_DIR = PROJECT_ROOT / "derivatives" / "sub-01" / "continuous_clean"
 
-# Region-specific line noise frequency
-# US/Canada/Japan (60Hz regions): 60.0
-# Europe/UK/Australia/Most of Asia: 50.0
-
-NOTCH_FREQ: float = 50.0  
+# Region-specific line noise frequency (50.0 for Europe/Asia, 60.0 for Americas)
+NOTCH_FREQ: float = 60.0
 
 # MEEGKit parameters (ASR + STAR + SNS)
-MEEGKIT_PARAMS = {
-    "highpass_filter": 1.0,
+MEEGKIT_PARAMS: Dict[str, Any] = {
+    "highpass_filter": 1.0,          # Required for ASR/ICA stability
     "low_pass_filter": 100.0,
-    "notch_filter_freq": NOTCH_FREQ,  
-    "mad_threshold": 20.0,
+    "notch_filter_freq": NOTCH_FREQ,       
+    "mad_threshold": 10.0,           # Conservative bad channel detection
     "min_amplitude_uv": 0.5,
-    "asr_cutoff": 3.5,                
-    "star_thresh": 2.5,
-    "sns_neighbors": 8,
-    "drop_cz": False,                  
-    "interpolate_bads": True,
+    "asr_cutoff": 3.5,               # Standard cutoff for high-density EEG
+    "star_thresh": 2.5,              # Eccentricity threshold for transient artifacts
+    "sns_neighbors": 8,              # Spatial neighbors for sensor noise suppression
+    "drop_cz": True,                 # Drop hardware reference before CAR
+    "interpolate_bads": False,       # CRITICAL: Defer interpolation to Step 2
     "generate_report": True,
 }
 
 # ICLabel refinement parameters
-ICALABEL_PARAMS = {
-    "mad_threshold": 50.0,            
+ICALABEL_PARAMS: Dict[str, Any] = {
+    "mad_threshold": 50.0,           # Relaxed threshold; MEEGKit already cleaned gross artifacts
     "min_amplitude_uv": 0.5,
-    "n_components": 0.99,
+    "n_components": 0.99,            # Explain 99% of variance
     "random_state": 42,
-    "interpolate_bads": True,
+    "interpolate_bads": False,       # CRITICAL: Defer interpolation to Step 2
     "generate_report": True,
 }
 
@@ -186,102 +87,277 @@ ICALABEL_PARAMS = {
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger(__name__)
 
+def process_continuous_raw(raw_path: Path, output_dir: Path) -> None:
+    """Convert raw data to FIF, then run the full native xeeg_kit pipeline."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if not raw_path.exists():
+        raise FileNotFoundError(f"Raw data not found: {raw_path}")
 
-def run_final_clean() -> Dict[str, Path]:
-    """Apply final MEEGKit + ICLabel pipeline to trimmed FIF."""
-    logger.info("=== Step 3: Final BEL Pipeline Cleaning ===")
+    # Step 1: Convert to FIF (preprocess_bel_trials requires FIF input)
+    staging_dir = output_dir / "staging"
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    staging_fif = staging_dir / f"{raw_path.stem}_eeg_raw.fif" 
+    
+    if not staging_fif.exists():
+        logger.info("Converting %s to FIF for library compatibility...", raw_path.suffix)
+        
+        # Universal MNE loader: Automatically routes to the correct parser 
+        # based on file extension. This replaces the need for format-specific calls:
+        # mne.io.read_raw_edf(...)   -> EDF
+        # mne.io.read_raw_egi(...)   -> MFF / EGI
+        # mne.io.read_raw_fif(...)   -> FIF
+        # mne.io.read_raw_brainvision(...) -> BrainVision
+        raw_data = mne.io.read_raw(str(raw_path), preload=False, verbose="WARNING")
+        
+        raw_data.save(str(staging_fif), overwrite=True, verbose="WARNING")
+        logger.info("Saved raw FIF: %s", staging_fif)
+    else:
+        logger.info("Staging FIF already exists, skipping conversion.")
 
-    if not TRIMMED_FIF.exists():
-        raise FileNotFoundError(
-            f"Trimmed FIF not found: {TRIMMED_FIF}\n"
-            "Complete your trimming/epoching step first."
-        )
-
-    result = preprocess_bel_trials(
-        data_dir=OUTPUT_DIR,
-        output_dir=OUTPUT_DIR,
-        gpsc_path=GPSC_FILE,
+    # Step 2: Run Native Pipeline
+    logger.info("Running preprocess_bel_trials...")
+    results = preprocess_bel_trials(
+        data_dir=staging_dir,
+        output_dir=output_dir,
         meegkit_params=MEEGKIT_PARAMS,
         icalabel_params=ICALABEL_PARAMS,
-        pattern=TRIMMED_FIF.name,
+        pattern=staging_fif.name,
         overwrite=True,
         verbose=True,
     )
 
-    logger.info("Final cleaning complete: %d file(s) processed", len(result))
-    return result
-
+    logger.info("Pipeline complete. %d file(s) processed.", len(results))
 
 if __name__ == "__main__":
-    results = run_final_clean()
-    for name, path in results.items():
-        logger.info("Output: %s → %s", name, path)
+    process_continuous_raw(raw_path=RAW_DATA_PATH, output_dir=OUTPUT_DIR)
 ```
-
-
 
 <br>
 
-## 4. Data Inspection
+## 2. Visual QA and Bad Channel Interpolation
 
-**Run this after both cleaning steps are complete.** This single script loads both the pre-cleaned and final cleaned FIF files side-by-side for comparative visual QA. This is mandatory to verify that cleaning preserved neural signals and did not introduce artifacts before proceeding to LCMV source reconstruction. Edit only the `USER CONFIGURATION` section at the top.
+**Run this in a Jupyter Notebook after Step 1.** 
+This step loads the continuously cleaned data, allows you to visually identify remaining bad channels (e.g., jaw/EMG channels that ASR/ICLabel might have missed), interpolates them using spherical splines, and applies the final Common Average Reference (CAR).
 
 ```python
-""" Comparative visual QA of pre-clean and final clean."""
-from __future__ import annotations
-
-import warnings
+# Jupyter Inspection & Interpolation Block
+import mne
+import logging
 from pathlib import Path
 
-import mne
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(message)s", datefmt="%H:%M:%S", force=True)
+logger = logging.getLogger(__name__)
 
-warnings.filterwarnings("ignore", category=RuntimeWarning)
-
-# ============================================================================
-
-# USER CONFIGURATION
-
-
-PRECLean_FIF = Path("/derivatives/sub-01/sub-01_preclean_raw.fif")
-CLEANED_FIF = Path("/derivatives/sub-01/sub-01_trimmed_raw_eeg.fif")
+# Ensure interactive backend is active in Jupyter
+%matplotlib widget  
 
 # ============================================================================
+# USER CONFIGURATION (UPDATE THESE PATHS)
+# ============================================================================
+PROJECT_ROOT = Path("/path/to/your/project")
+CLEANED_FIF = PROJECT_ROOT / "derivatives" / "sub-01" / "continuous_clean" / "sub-01_task_eeg_raw_eeg.fif"
+# ============================================================================
 
-
-
-def _print_summary(label: str, raw: mne.io.Raw) -> None:
-    """Print standardized summary for a Raw object."""
-    print(f"\n{'=' * 60}")
-    print(f"  {label}")
-    print(f"{'=' * 60}")
-    print(f"  Channels: {len(raw.ch_names)}")
-    print(f"  Duration: {raw.n_times / raw.info['sfreq']:.1f}s")
-    print(f"  Highpass: {raw.info.get('highpass', 'N/A')} Hz")
-    print(f"  Lowpass:  {raw.info.get('lowpass', 'N/A')} Hz")
-    print(f"  Bads:     {raw.info['bads']}")
-    print(f"{'=' * 60}")
-
-
-
-"""Load and plot both pre-cleaned and final cleaned data for comparative QA."""
-if not PRECLEAN_FIF.exists():
-    raise FileNotFoundError(f"Pre-cleaned FIF not found: {PRECLean_FIF}")
 if not CLEANED_FIF.exists():
-    raise FileNotFoundError(f"Final cleaned FIF not found: {CLEANED_FIF}")
+    raise FileNotFoundError(f"Run Step 1 first. Missing: {CLEANED_FIF}")
 
-raw_pre = mne.io.read_raw_fif(str(PRECLEAN_FIF), preload=True, verbose="WARNING")
 raw_clean = mne.io.read_raw_fif(str(CLEANED_FIF), preload=True, verbose="WARNING")
 
-_print_summary("PRE-CLEAN (MAD + ICA)", raw_pre)
-_print_summary("FINAL CLEAN (ASR+STAR+SNS+ICLabel)", raw_clean)
+logger.info("Channels: %d | Duration: %.1fs | Bads: %s", 
+            len(raw_clean.ch_names), raw_clean.n_times / raw_clean.info['sfreq'], raw_clean.info['bads'])
 
-# Open both plots for side-by-side comparison
-raw_pre.plot(n_channels=45, title="PRE-CLEAN QA", verbose="WARNING")
-raw_clean.plot(n_channels=45, title="FINAL CLEAN QA", verbose="WARNING")
-
-
+# Open interactive plot. Scroll through channels, click on names to mark as bad.
+raw_clean.plot(n_channels=50, title="CONTINUOUS CLEAN QA (Click channel names to mark bad)", verbose="WARNING");
 ```
 
+```python
+# %% Run this cell AFTER closing the interactive plot window above
 
+# Add specific non-neural channels programmatically (e.g., BEL jaw/EMG channels)
+MANUAL_BADS = ["E52", "E42", "E43", "E280", "E275", "E276"] 
+
+# Merge interactive selections + manual additions
+updated_bads = sorted(set(raw_clean.info["bads"] + MANUAL_BADS))
+raw_clean.info["bads"] = updated_bads
+logger.info("Final bad channels (%d): %s", len(updated_bads), updated_bads)
+
+# Interpolate and Re-reference
+logger.info("Interpolating %d bad channels...", len(updated_bads))
+raw_clean.interpolate_bads(reset_bads=True)
+raw_clean.set_eeg_reference("average", projection=False, verbose=False)
+logger.info("Re-applied CAR after interpolation.")
+
+# Save to NEW file
+INTERPOLATED_FIF = CLEANED_FIF.with_stem(CLEANED_FIF.stem + "_interp_eeg")
+raw_clean.save(str(INTERPOLATED_FIF), overwrite=True, verbose="WARNING")
+logger.info("Saved interpolated data: %s", INTERPOLATED_FIF.name)
+```
 
 <br>
+
+## 3. Event-Aligned Epoching
+
+Segments the interpolated continuous data into trials aligned to your cognitive event (e.g., `choice_press_ttl`). 
+
+**Critical Design Choice:** `baseline=None` is used here. Baseline correction is mathematically deferred to the LCMV beamformer's noise covariance matrix computation, which provides superior spatial whitening compared to simple time-domain subtraction.
+
+```python
+"""Create epochs from interpolated continuous EEG."""
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+import mne
+import numpy as np
+import pandas as pd
+
+# ============================================================================
+# USER CONFIGURATION (UPDATE THESE PATHS)
+# ============================================================================
+PROJECT_ROOT = Path("/path/to/your/project")
+
+INTERPOLATED_FIF = PROJECT_ROOT / "derivatives" / "sub-01" / "continuous_clean" / "sub-01_task_eeg_raw_eeg_interp_eeg.fif"
+VALIDATION_CSV = PROJECT_ROOT / "logs" / "sub-01_validation.csv" # Your event onsets
+OUTPUT_EPO = PROJECT_ROOT / "derivatives" / "sub-01" / "eeg_epochs" / "sub-01_epo.fif"
+
+EPOCH_TMIN: float = -2.5
+EPOCH_TMAX: float = 2.5
+ALIGNMENT_COLUMN: str = "choice_press_ttl" # Column in CSV with event times in seconds
+# ============================================================================
+
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(message)s", datefmt="%H:%M:%S")
+logger = logging.getLogger(__name__)
+
+def create_epochs() -> None:
+    raw = mne.io.read_raw_fif(str(INTERPOLATED_FIF), preload=True, verbose="WARNING")
+    df = pd.read_csv(VALIDATION_CSV)
+    df_valid = df[df["valid_choice_trial"] == True].copy()
+    
+    sfreq = raw.info["sfreq"]
+    onset_samples = np.round(df_valid[ALIGNMENT_COLUMN].to_numpy() * sfreq).astype(int)
+    events_array = np.column_stack([onset_samples, np.zeros(len(onset_samples), dtype=int), np.ones(len(onset_samples), dtype=int)])
+
+    # baseline=None is critical for downstream LCMV noise covariance whitening
+    epochs = mne.Epochs(raw, events_array, event_id=1, tmin=EPOCH_TMIN, tmax=EPOCH_TMAX, 
+                        baseline=None, preload=True, verbose="WARNING")
+
+    OUTPUT_EPO.parent.mkdir(parents=True, exist_ok=True)
+    epochs.save(str(OUTPUT_EPO), overwrite=True, verbose="WARNING")
+    logger.info("Saved %d epochs → %s", len(epochs), OUTPUT_EPO.name)
+
+if __name__ == "__main__":
+    create_epochs()
+```
+
+<br>
+
+## 4. Epoch-Level Artifact Rejection (AutoReject)
+
+Loads the raw epochs and applies a two-stage cleaning process optimized for 280-channel high-density arrays:
+1. **RANSAC:** Identifies globally unpredictable channels across the entire recording and interpolates them.
+2. **AutoReject:** Uses Bayesian optimization to find the optimal per-channel thresholds. It repairs transient artifacts (e.g., a single eye blink in one trial) via local interpolation, and only drops the entire trial if the artifact is too widespread to repair.
+
+```python
+"""Epoch-Level Artifact Rejection and Repair using Autoreject."""
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+import matplotlib.pyplot as plt
+import mne
+import numpy as np
+from autoreject import AutoReject, Ransac
+
+# ============================================================================
+# USER CONFIGURATION (UPDATE THESE PATHS)
+# ============================================================================
+PROJECT_ROOT = Path("/path/to/your/project")
+
+INPUT_EPOCHS = PROJECT_ROOT / "derivatives" / "sub-01" / "eeg_epochs" / "sub-01_epo.fif"
+OUTPUT_EPOCHS = PROJECT_ROOT / "derivatives" / "sub-01" / "eeg_epochs" / "sub-01_epo_clean.fif"
+OUTPUT_LOG = PROJECT_ROOT / "derivatives" / "sub-01" / "eeg_epochs" / "sub-01_reject_log.npz"
+
+# AutoReject Parameters (Optimized for 280-channel High-Density EEG)
+# Max 32 channels interpolated per trial (~11.4% of 280; safe for spherical splines)
+N_INTERPOLATE: np.ndarray = np.array([1, 4, 16, 32])
+CONSENSUS: np.ndarray = np.linspace(0.1, 1.0, 10)
+# ============================================================================
+
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(message)s", datefmt="%H:%M:%S")
+logger = logging.getLogger(__name__)
+
+def process_epochs() -> None:
+    epochs = mne.read_epochs(str(INPUT_EPOCHS), preload=True, verbose="WARNING")
+    logger.info("Loaded %d epochs, %d channels.", len(epochs), len(epochs.ch_names))
+
+    # 1. RANSAC (Global bad channel detection)
+    logger.info("Running RANSAC...")
+    ransac = Ransac(n_resample=50, min_channels=0.25, min_corr=0.75, unbroken_time=0.4, n_jobs=-1, verbose=True)
+    ransac.fit(epochs)
+
+    if ransac.bad_chs_:
+        logger.info("RANSAC identified %d globally bad channels.", len(ransac.bad_chs_))
+        epochs.info["bads"] = ransac.bad_chs_
+        epochs.interpolate_bads(reset_bads=True)
+
+    # 2. AutoReject (Trial-specific transient artifact repair)
+    logger.info("Fitting AutoReject...")
+    ar = AutoReject(n_interpolate=N_INTERPOLATE, consensus=CONSENSUS, random_state=42, n_jobs=-1, verbose=True)
+    epochs_clean, reject_log = ar.fit_transform(epochs, return_log=True)
+    
+    logger.info("AutoReject complete. Retained %d / %d epochs.", len(epochs_clean), len(epochs))
+
+    # 3. Save Outputs
+    epochs_clean.save(str(OUTPUT_EPOCHS), overwrite=True, verbose="WARNING")
+    reject_log.save(str(OUTPUT_LOG), overwrite=True)
+    
+    # 4. QC Plots
+    fig_log = reject_log.plot(orientation="horizontal", show=False)
+    fig_log.savefig(str(OUTPUT_LOG.with_suffix(".png")), dpi=150, bbox_inches="tight")
+    plt.close(fig_log)
+
+if __name__ == "__main__":
+    process_epochs()
+```
+
+<br>
+
+## 5. Final Epoch Inspection
+
+**Run this in a Jupyter Notebook after Step 4.**
+Opens the MNE interactive epoch browser. Use `Page Down` / `Page Up` to scroll through all 280 channels (50 at a time). Verify that the AutoReject repairs look clean and that the readiness potential / movement execution signals are intact.
+
+```python
+# %% Jupyter Epoch Inspection Block
+import mne
+from pathlib import Path
+
+%matplotlib widget  
+
+# ============================================================================
+# USER CONFIGURATION (UPDATE THESE PATHS)
+# ============================================================================
+PROJECT_ROOT = Path("/path/to/your/project")
+CLEAN_EPO = PROJECT_ROOT / "derivatives" / "sub-01" / "eeg_epochs" / "sub-01_epo_clean.fif"
+# ============================================================================
+
+epochs_clean = mne.read_epochs(str(CLEAN_EPO), preload=True, verbose="WARNING")
+
+# n_channels=50 shows 50 channels at a time. 
+# Use Page Down/Up to scroll through all 280 channels.
+# Use - / + to adjust amplitude scaling.
+fig_browser = epochs_clean.plot(
+    n_epochs=1, 
+    n_channels=50, 
+    events=False, 
+    title="Interactive Epoch Inspector (Post-AutoReject)",
+)
+```
+
+<br>
+
+### Integration with `lcmv_xtra`
+
+The output of Step 4 (`sub-01_epo_clean.fif`) is the exact input expected by the refactored `lcmv_xtra.source_estimation_epochs` library. 
+
+Because you deferred baseline correction (`baseline=None` in Step 3) and avoided double-whitening (by keeping MEEGKit/ICLabel interpolation separate from LCMV noise covariance), the beamformer will correctly use your manually defined time windows (e.g., Noise: `[-2.5, -2.0]s`, Data: `[-2.0, 2.0]s`) to construct unbiased spatial filters and extract single-trial time series for your M1 and STN ROIs.
