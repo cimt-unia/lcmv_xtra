@@ -89,7 +89,7 @@ def _process_single_subject_custom_epochs_native(args: Tuple) -> Dict:
         verbose, reg,
         noise_cov_method, baseline_tmin, baseline_tmax,
         data_cov_tmin, data_cov_tmax, compute_noise_cov,
-        roi_coordinates, radius_mm, mode
+        roi_coordinates, radius_mm, mode, coregister
     ) = args
 
     try:
@@ -111,6 +111,7 @@ def _process_single_subject_custom_epochs_native(args: Tuple) -> Dict:
             data_cov_tmin=data_cov_tmin,
             data_cov_tmax=data_cov_tmax,
             compute_noise_cov=compute_noise_cov,
+            coregister=coregister,
         )
 
         subject_output = Path(metadata['subject_output'])
@@ -234,6 +235,7 @@ def assemble_custom_tensor_epochs_native(
     data_cov_tmin: Optional[float] = None,
     data_cov_tmax: Optional[float] = None,
     compute_noise_cov: bool = True,
+    coregister: bool = True,
 ) -> Optional[Path]:
     """
     Assemble a 4D custom ROI epoch tensor using the SUBJECT'S NATIVE T1 
@@ -250,6 +252,10 @@ def assemble_custom_tensor_epochs_native(
         Directory containing fsaverage resources (fsaverage-vol-5mm-src.fif).
     roi_coordinates : dict
         Mapping of ROI name → [x, y, z] MNI coordinates (mm).
+    coregister : bool
+        If True (default), runs ICP coregistration to align sensors to the native MRI.
+        If False, assumes sensors in the .fif file are already in the native MRI 
+        coordinate space and uses an identity transform (skips ICP and threshold checks).
     """
     if data_index.empty:
         return None
@@ -262,7 +268,7 @@ def assemble_custom_tensor_epochs_native(
             project_base, subjects_dir, fs_dir, verbose, reg,
             noise_cov_method, baseline_tmin, baseline_tmax,
             data_cov_tmin, data_cov_tmax, compute_noise_cov,
-            roi_coordinates, radius_mm, mode,
+            roi_coordinates, radius_mm, mode, coregister,
         )
         for _, row in data_index.iterrows()
     ]
