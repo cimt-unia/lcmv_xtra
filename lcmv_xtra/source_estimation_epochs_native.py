@@ -49,14 +49,16 @@ def lcmv_beamformer_epochs_native(
     data_cov_tmin: Optional[float] = None,
     data_cov_tmax: Optional[float] = None,
     compute_noise_cov: bool = True,
-    coregister: bool = True,  # <-- NEW: Toggle coregistration
+    coregister: bool = True,
+    morph_to_fsaverage: bool = False,  # <-- NEW: Toggle morphing, False by default
 ) -> Dict:
     """
     Run epoch-based LCMV source estimation using the SUBJECT'S NATIVE T1.
     
     Computes the forward model and beamformer filters in native space for 
-    biophysical accuracy, then morphs the resulting STCs to fsaverage space 
-    to maintain compatibility with lcmv_xtra's atlas extraction functions.
+    biophysical accuracy. Always saves un-morphed native STCs for exact 
+    native coordinate extraction. Optionally morphs STCs to fsaverage space 
+    for compatibility with lcmv_xtra's MNI atlas extraction functions.
     
     Parameters
     ----------
@@ -64,6 +66,10 @@ def lcmv_beamformer_epochs_native(
         If True (default), runs ICP coregistration to align sensors to the native MRI.
         If False, assumes sensors in the .fif file are already in the native MRI 
         coordinate space and uses an identity transform (skips ICP and threshold checks).
+    morph_to_fsaverage : bool
+        If True, morphs the resulting native STCs to fsaverage space and saves them.
+        If False (default), skips the computationally expensive morphing step and 
+        only saves the pure native STCs.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -73,13 +79,16 @@ def lcmv_beamformer_epochs_native(
     log.info(f"NATIVE LCMV Epoch Source Estimation: {subject_id} - {task}")
     log.info(f"{'='*60}")
 
-    # 1. Validate Anatomies (Native for physics, fsaverage for morph target)
+    # 1. Validate Anatomies (Native for physics, fsaverage for morph target if needed)
     native_bem_file, native_src_file = validate_native_anatomy(subject_id, subjects_dir)
-    _, fsaverage_src_file = validate_fsaverage(fsaverage_dir)
     
     src_native = mne.read_source_spaces(native_src_file)
     bem_native = mne.read_bem_solution(native_bem_file)
-    src_fsaverage = mne.read_source_spaces(fsaverage_src_file)
+    
+    src_fsaverage = None
+    if morph_to_fsaverage:
+        _, fsaverage_src_file = validate_fsaverage(fsaverage_dir)
+        src_fsaverage = mne.read_source_spaces(fsaverage_src_file)
 
     # 2. Coregistration to NATIVE MRI
     trans_file = output_dir / f'{subject_id}-trans.fif'
@@ -136,30 +145,65 @@ def lcmv_beamformer_epochs_native(
         epochs=epochs, filters=filters
     )
 
-    # 7. Morph to fsaverage (CRITICAL FOR LCMV_XTRA COMPATIBILITY)
-    log.info("Preparing morph from native space to fsaverage...")
-    morph = mne.compute_source_morph(
-        src=src_native,
-        subject_from=subject_id,
-        subject_to='fsaverage',
-        src_to=src_fsaverage,
-        subjects_dir=str(subjects_dir),
-        verbose=False
-    )
-
-    # 8. Apply morph and save each epoch STC individually
-    log.info(f"Morphing and saving {len(stcs_native)} epoch source estimates to fsaverage space...")
+    # 7. Save UN-MORPHED Native STCs (Always saved for native coordinate/LFP extraction)
+    native_dir = output_dir / "native_stcs"
+    native_dir.mkdir(parents=True, exist_ok=True)
+    log.info(f"Saving {len(stcs_native)} UN-MORPHED native epoch STCs to {native_dir}...")
     for i, stc_nat in enumerate(stcs_native):
-        stc_fsavg = morph.apply(stc_nat)
-        stc_file = output_dir / f'source_estimate_LCMV_epoch_{i:03d}.h5'
-        stc_fsavg.save(stc_file, ftype='h5', overwrite=True)
+        native_file = native_dir / f'source_estimate_LCMV_epoch_{i:03d}_native.h5'
+        stc_nat.save(native_file, ftype='h5', overwrite=True)
+
+    # 8. Morph to fsaverage (Optional, for MNI atlas extraction)
+    if morph_to_fsaverage:
+        log.info("Preparing morph from native space to fsaverage...")
+        morph = mne.compute_source_morph(
+            src=src_native,
+            subject_from=subject_id,
+            subject_to='fsaverage',
+            src_to=src_fsaverage,
+            subjects_dir=str(subjects_dir),
+            verbose=False
+        )
+
+        # Vectorized morphing to avoid sequential bottleneck
+        log.info(f"Concatenating {len(stcs_native)} epochs for vectorized morphing...")
+        all_data_native = np.concatenate([stc.data for stc in stcs_native], axis=1)
+        giant_stc_native = mne.VolSourceEstimate(
+            data=all_data_native, 
+            vertices=stcs_native[0].vertices,
+            tmin=stcs_native[0].tmin, 
+            tstep=stcs_native[0].tstep
+        )
+
+        log.info("Applying volumetric morph to all epochs simultaneously...")
+        giant_stc_fsavg = morph.apply(giant_stc_native)
+        
+        log.info(f"Splitting and saving {len(stcs_native)} morphed epoch STCs to fsaverage space...")
+        n_times_per_epoch = stcs_native[0].data.shape[1]
+        
+        for i in range(len(stcs_native)):
+            start_idx = i * n_times_per_epoch
+            end_idx = start_idx + n_times_per_epoch
+            
+            stc_fsavg = mne.VolSourceEstimate(
+                data=giant_stc_fsavg.data[:, start_idx:end_idx],
+                vertices=giant_stc_fsavg.vertices,
+                tmin=stcs_native[i].tmin,
+                tstep=stcs_native[i].tstep
+            )
+            
+            stc_file = output_dir / f'source_estimate_LCMV_epoch_{i:03d}.h5'
+            stc_fsavg.save(stc_file, ftype='h5', overwrite=True)
+    else:
+        log.info("Skipping fsaverage morphing (morph_to_fsaverage=False).")
 
     # Metadata
     metadata = {
         'subject_id': subject_id,
         'task': task,
-        'space': 'native_forward_morphed_to_fsaverage',
-        'coregistration_applied': coregister,  # Track what was done
+        'space': 'native_forward_morphed_to_fsaverage' if morph_to_fsaverage else 'pure_native_unmorphed',
+        'coregistration_applied': coregister,
+        'morph_to_fsaverage': morph_to_fsaverage,
         'sfreq_hz': float(epochs.info['sfreq']),
         'epoch_tmin': float(epochs.tmin),
         'epoch_tmax': float(epochs.tmax),
@@ -173,7 +217,8 @@ def lcmv_beamformer_epochs_native(
         'weight_normalization': 'unit-noise-gain',
         'covariance_mode': 'separate',
         'subject_output': str(output_dir),
-        'fsaverage_dir': str(fsaverage_dir)
+        'native_stcs_dir': str(native_dir),
+        'fsaverage_dir': str(fsaverage_dir) if morph_to_fsaverage else None
     }
     with open(output_dir / 'pipeline_metadata.json', 'w') as f:
         json.dump(metadata, f, indent=2)
@@ -199,7 +244,8 @@ def execute_source_estimation_epochs_native(
     data_cov_tmin: Optional[float] = None,
     data_cov_tmax: Optional[float] = None,
     compute_noise_cov: bool = True,
-    coregister: bool = True,  # <-- NEW: Toggle coregistration
+    coregister: bool = True,
+    morph_to_fsaverage: bool = False,  # <-- NEW: Toggle morphing, False by default
 ) -> Dict:
     """High-level orchestrator for native epoch-based LCMV source estimation."""
     import lcmv_xtra
@@ -225,5 +271,6 @@ def execute_source_estimation_epochs_native(
         baseline_tmin=baseline_tmin, baseline_tmax=baseline_tmax,
         data_cov_tmin=data_cov_tmin, data_cov_tmax=data_cov_tmax,
         compute_noise_cov=compute_noise_cov,
-        coregister=coregister,  # <-- Pass it down
+        coregister=coregister,
+        morph_to_fsaverage=morph_to_fsaverage,  # <-- Pass it down
     )
