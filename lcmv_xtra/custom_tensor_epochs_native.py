@@ -1,14 +1,18 @@
 # lcmv_xtra/custom_tensor_epochs_native.py
 """
-Custom MNI Voxel Epoch Tensor Assembly (Native Space Forward Model).
+Custom Voxel Epoch Tensor Assembly (Native Space Forward Model).
 =====================================================================
-Extracts time courses from user-defined MNI coordinates per epoch,
+Extracts time courses from user-defined coordinates per epoch,
 producing a 4D tensor: (Subjects, ROIs, Epochs, Time_per_epoch).
 
-This module uses the native-space forward model (subject's own T1/BEM)
-for biophysical accuracy, but relies on the fact that the native pipeline
-morphs the resulting STCs to fsaverage space, allowing standard MNI 
-coordinate-based ROI extraction.
+Supports two modes via `morph_to_fsaverage` flag:
+1. morph_to_fsaverage=False (Default): 
+   Extracts directly from un-morphed native STCs. Coordinates MUST be 
+   in the subject's Native Surface RAS space (mm). Use the provided 
+   `transform_clinical_to_native_source_space` utility to convert 
+   clinical/DICOM coordinates to Native Surface RAS.
+2. morph_to_fsaverage=True: 
+   Morphs STCs to fsaverage and extracts using standard MNI coordinates.
 """
 
 import os
@@ -21,7 +25,6 @@ from scipy import signal
 from typing import List, Dict, Optional, Tuple, Literal
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-# Import the NATIVE epoch source estimation function
 from .source_estimation_epochs_native import execute_source_estimation_epochs_native
 
 logger = logging.getLogger(__name__)
@@ -30,20 +33,50 @@ METERS_TO_MILLIMETERS: float = 1000.0
 DEFAULT_RADIUS_MM: float = 5.0
 DEFAULT_TARGET_SFREQ: float = 250.0
 
-
-def _get_mni_coordinates_from_src(
-    stc: mne.SourceEstimate, 
-    src: mne.SourceSpaces
+# =============================================================================
+# COORDINATE TRANSFORMATION UTILITIES
+# =============================================================================
+def transform_clinical_to_native_source_space(
+    clinical_coords_mm: np.ndarray,
+    native_src_file: Path,
+    coord_frame: str = 'NIfTI_RAS'
 ) -> np.ndarray:
-    """Convert active source space vertex coordinates to MNI space (mm)."""
-    vertices = stc.vertices[0]
-    src_rr = src[0]['rr'][vertices] * METERS_TO_MILLIMETERS
+    """
+    Transforms clinical LFP coordinates into FreeSurfer Surface RAS (mm)
+    for direct extraction from native MNE source estimates.
     
-    # Because the STC was morphed to fsaverage, these coordinates are 
-    # effectively MNI-aligned via the fsaverage mri_ras_t transform.
-    return src_rr
+    Parameters
+    ----------
+    clinical_coords_mm : array-like, shape (3,) or (N, 3)
+        The [x, y, z] coordinates from your surgical planning software.
+    native_src_file : Path
+        Path to the subject's native volume source space.
+    coord_frame : str
+        'NIfTI_RAS' (Right, Anterior, Superior) or 'DICOM_LPS' (Left, Posterior, Superior).
+    """
+    coords = np.atleast_2d(clinical_coords_mm).astype(float)
+    
+    if coord_frame == 'DICOM_LPS':
+        coords[:, 0] = -coords[:, 0]  # Left -> Right
+        coords[:, 1] = -coords[:, 1]  # Posterior -> Anterior
+        
+    coords_m = coords / 1000.0
+    src = mne.read_source_spaces(native_src_file)
+    
+    try:
+        mri_ras_t = src[0]['mri_ras_t']['trans']
+    except KeyError:
+        raise ValueError("Source space missing 'mri_ras_t' transform.")
+        
+    ras_to_surf = np.linalg.inv(mri_ras_t)
+    coords_homog = np.hstack([coords_m, np.ones((coords_m.shape[0], 1))])
+    surf_ras_m = (ras_to_surf @ coords_homog.T).T[:, :3]
+    
+    return surf_ras_m * 1000.0
 
-
+# =============================================================================
+# ROI EXTRACTION
+# =============================================================================
 def extract_custom_roi_time_courses(
     stc: mne.SourceEstimate,
     src: mne.SourceSpaces,
@@ -52,17 +85,19 @@ def extract_custom_roi_time_courses(
     mode: Literal["sphere", "single"] = "sphere",
 ) -> Tuple[np.ndarray, List[str]]:
     """
-    Extract time courses from user-defined MNI coordinates.
-    (Identical to standard pipeline since STCs are morphed to fsaverage).
+    Extract time courses from user-defined coordinates.
+    Works for both Native Surface RAS (if src is native) and MNI (if src is fsaverage).
     """
     stc_data = np.abs(stc.data) if np.iscomplexobj(stc.data) else stc.data
-    active_coords_mni = _get_mni_coordinates_from_src(stc, src)
+    
+    vertices = stc.vertices[0]
+    active_coords_mm = src[0]['rr'][vertices] * METERS_TO_MILLIMETERS
 
     time_courses, roi_names = [], []
 
-    for roi_name, target_mni in roi_coordinates.items():
-        target = np.array(target_mni, dtype=np.float64)
-        distances = np.linalg.norm(active_coords_mni - target, axis=1)
+    for roi_name, target_coord in roi_coordinates.items():
+        target = np.array(target_coord, dtype=np.float64)
+        distances = np.linalg.norm(active_coords_mm - target, axis=1)
 
         if mode == "single":
             selected_indices = np.array([np.argmin(distances)])
@@ -70,7 +105,7 @@ def extract_custom_roi_time_courses(
             selected_indices = np.where(distances <= radius_mm)[0]
             if selected_indices.size == 0:
                 logger.warning(
-                    f"No vertices within {radius_mm}mm of {roi_name} {target_mni}. "
+                    f"No vertices within {radius_mm}mm of {roi_name} {target_coord}. "
                     f"Using nearest vertex at {distances.min():.2f}mm."
                 )
                 selected_indices = np.array([np.argmin(distances)])
@@ -81,21 +116,21 @@ def extract_custom_roi_time_courses(
 
     return np.vstack(time_courses), roi_names
 
-
+# =============================================================================
+# SINGLE SUBJECT PROCESSING
+# =============================================================================
 def _process_single_subject_custom_epochs_native(args: Tuple) -> Dict:
-    """Process one subject: native epoch source estimation + per-epoch custom ROI extraction."""
+    """Process one subject: native epoch source estimation + per-epoch ROI extraction."""
     (
         sid, epochs_path, task_name, project_base, subjects_dir, fs_dir,
         verbose, reg,
         noise_cov_method, baseline_tmin, baseline_tmax,
         data_cov_tmin, data_cov_tmax, compute_noise_cov,
-        roi_coordinates, radius_mm, mode, coregister
+        roi_coordinates, radius_mm, mode, coregister, morph_to_fsaverage
     ) = args
 
     try:
         # 1. Run NATIVE epoch-based source estimation
-        # This computes the forward model in native space, applies LCMV, 
-        # and morphs the resulting STCs to fsaverage space.
         metadata = execute_source_estimation_epochs_native(
             project_base=project_base,
             subject_id=sid,
@@ -112,22 +147,32 @@ def _process_single_subject_custom_epochs_native(args: Tuple) -> Dict:
             data_cov_tmax=data_cov_tmax,
             compute_noise_cov=compute_noise_cov,
             coregister=coregister,
+            morph_to_fsaverage=morph_to_fsaverage,
         )
 
         subject_output = Path(metadata['subject_output'])
         n_epochs = metadata['n_epochs']
         
-        # 2. Load fsaverage source space for MNI coordinate extraction
-        # (Since the STCs were morphed to fsaverage, we use the fsaverage grid)
-        src_file = Path(fs_dir) / "fsaverage-vol-5mm-src.fif"
+        # 2. Determine Source Space and STC paths based on morph flag
+        if morph_to_fsaverage:
+            src_file = Path(fs_dir) / "fsaverage-vol-5mm-src.fif"
+            stc_dir = subject_output
+            stc_pattern = "source_estimate_LCMV_epoch_{i:03d}.h5"
+            logger.info(f"[{sid}] Extracting from MORPHED fsaverage STCs (MNI coordinates).")
+        else:
+            src_file = Path(subjects_dir) / sid / f"{sid}-vol-5mm-src.fif"
+            stc_dir = subject_output / "native_stcs"
+            stc_pattern = "source_estimate_LCMV_epoch_{i:03d}_native.h5"
+            logger.info(f"[{sid}] Extracting from PURE NATIVE STCs (Native Surface RAS coordinates).")
+            
         src = mne.read_source_spaces(str(src_file))
 
         # 3. Extract custom ROI time courses PER EPOCH
         epoch_time_courses = []
         for i in range(n_epochs):
-            stc_file = subject_output / f'source_estimate_LCMV_epoch_{i:03d}.h5'
+            stc_file = stc_dir / stc_pattern.format(i=i)
             if not stc_file.exists():
-                logger.warning(f"Missing epoch STC for {sid} epoch {i}, skipping")
+                logger.warning(f"Missing STC for {sid} epoch {i} at {stc_file}, skipping")
                 continue
 
             stc = mne.read_source_estimate(str(stc_file))
@@ -136,14 +181,14 @@ def _process_single_subject_custom_epochs_native(args: Tuple) -> Dict:
                 roi_coordinates=roi_coordinates,
                 radius_mm=radius_mm, mode=mode,
             )
-            epoch_time_courses.append(tc)  # Shape: (n_rois, time_per_epoch)
+            epoch_time_courses.append(tc)
 
         if not epoch_time_courses:
-            raise RuntimeError(f"No valid epoch STCs found for {sid}")
+            raise RuntimeError(f"No valid STCs found for {sid}")
 
         return {
             "subject_id": sid,
-            "epoch_time_courses": np.stack(epoch_time_courses, axis=0),  # (n_epochs, n_rois, time)
+            "epoch_time_courses": np.stack(epoch_time_courses, axis=0),
             "roi_names": list(roi_coordinates.keys()),
             "sfreq": metadata['sfreq_hz'],
             "n_epochs": len(epoch_time_courses),
@@ -153,12 +198,15 @@ def _process_single_subject_custom_epochs_native(args: Tuple) -> Dict:
         logger.error(f"Failed {sid}: {e}", exc_info=True)
         return {"subject_id": sid, "success": False}
 
-
+# =============================================================================
+# TENSOR ASSEMBLY
+# =============================================================================
 def save_custom_tensor_epochs_native(
     all_subject_data: List[Dict],
     task_name: str,
     output_dir: Path,
     target_sfreq: float = DEFAULT_TARGET_SFREQ,
+    morph_to_fsaverage: bool = False,
 ) -> Path:
     """Stack into 4D array: (Subjects, ROIs, Epochs, Time_per_epoch)."""
     if not all_subject_data:
@@ -170,7 +218,7 @@ def save_custom_tensor_epochs_native(
     subject_ids = []
 
     for d in all_subject_data:
-        etc = d['epoch_time_courses']  # (n_epochs, n_rois, time)
+        etc = d['epoch_time_courses']
         current_sfreq = d['sfreq']
 
         if current_sfreq != target_sfreq:
@@ -183,20 +231,19 @@ def save_custom_tensor_epochs_native(
             resampled_data.append(etc)
         subject_ids.append(d['subject_id'])
 
-    # Truncate to shortest common dimensions
     min_epochs = min(arr.shape[0] for arr in resampled_data)
     min_time = min(arr.shape[2] for arr in resampled_data)
 
     stacked = np.stack([
         arr[:min_epochs, :, :min_time] for arr in resampled_data
-    ])  # (n_subjects, min_epochs, n_rois, min_time)
+    ])
 
-    # Reorder to (Subjects, ROIs, Epochs, Time)
     stacked = np.transpose(stacked, (0, 2, 1, 3))
-
     roi_names = all_subject_data[0]['roi_names']
 
-    output_path = output_dir / f"tensor_{task_name}_custom_epochs_native.npz"
+    space_tag = "morphed_to_fsaverage" if morph_to_fsaverage else "pure_native"
+    output_path = output_dir / f"tensor_{task_name}_custom_epochs_native_{space_tag}.npz"
+    
     np.savez_compressed(
         output_path,
         data=stacked,
@@ -205,7 +252,7 @@ def save_custom_tensor_epochs_native(
         sfreq=target_sfreq,
         n_epochs=min_epochs,
         n_rois=stacked.shape[1],
-        forward_model="native_T1_morphed_to_fsaverage" # Metadata tag
+        forward_model=f"native_T1_{space_tag}"
     )
 
     logger.info(
@@ -236,26 +283,17 @@ def assemble_custom_tensor_epochs_native(
     data_cov_tmax: Optional[float] = None,
     compute_noise_cov: bool = True,
     coregister: bool = True,
+    morph_to_fsaverage: bool = False,
 ) -> Optional[Path]:
     """
-    Assemble a 4D custom ROI epoch tensor using the SUBJECT'S NATIVE T1 
-    for the forward model, with results morphed to fsaverage for MNI extraction.
+    Assemble a 4D custom ROI epoch tensor using the SUBJECT'S NATIVE T1.
     
     Parameters
     ----------
-    data_index : pd.DataFrame
-        Must contain 'subject_id' and 'epochs_path' columns. 
-    subjects_dir : Path
-        Directory containing subject-specific FreeSurfer recon-all outputs 
-        (e.g., sub-DP02/bem, sub-DP02/mri).
-    fs_dir : Path
-        Directory containing fsaverage resources (fsaverage-vol-5mm-src.fif).
-    roi_coordinates : dict
-        Mapping of ROI name → [x, y, z] MNI coordinates (mm).
-    coregister : bool
-        If True (default), runs ICP coregistration to align sensors to the native MRI.
-        If False, assumes sensors in the .fif file are already in the native MRI 
-        coordinate space and uses an identity transform (skips ICP and threshold checks).
+    morph_to_fsaverage : bool
+        If False (default), extracts directly from un-morphed native STCs. 
+        `roi_coordinates` MUST be in the subject's Native Surface RAS space (mm).
+        If True, morphs STCs to fsaverage and extracts using MNI coordinates.
     """
     if data_index.empty:
         return None
@@ -268,7 +306,7 @@ def assemble_custom_tensor_epochs_native(
             project_base, subjects_dir, fs_dir, verbose, reg,
             noise_cov_method, baseline_tmin, baseline_tmax,
             data_cov_tmin, data_cov_tmax, compute_noise_cov,
-            roi_coordinates, radius_mm, mode, coregister,
+            roi_coordinates, radius_mm, mode, coregister, morph_to_fsaverage
         )
         for _, row in data_index.iterrows()
     ]
@@ -277,7 +315,9 @@ def assemble_custom_tensor_epochs_native(
     if n_jobs == -1:
         n_jobs = os.cpu_count()
 
+    space_str = "MNI (fsaverage)" if morph_to_fsaverage else "Native Surface RAS"
     logger.info(f"Processing {len(tasks)} subjects with {n_jobs} workers (Native Forward Model)...")
+    logger.info(f"Extraction Space: {space_str}")
 
     with ProcessPoolExecutor(max_workers=n_jobs) as executor:
         future_to_sid = {
@@ -291,6 +331,8 @@ def assemble_custom_tensor_epochs_native(
 
     if all_subject_data:
         return save_custom_tensor_epochs_native(
-            all_subject_data, task_name, output_dir, target_sfreq=target_sfreq,
+            all_subject_data, task_name, output_dir, 
+            target_sfreq=target_sfreq,
+            morph_to_fsaverage=morph_to_fsaverage
         )
     return None
