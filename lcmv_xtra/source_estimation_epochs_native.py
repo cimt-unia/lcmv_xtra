@@ -49,6 +49,7 @@ def lcmv_beamformer_epochs_native(
     data_cov_tmin: Optional[float] = None,
     data_cov_tmax: Optional[float] = None,
     compute_noise_cov: bool = True,
+    coregister: bool = True,  # <-- NEW: Toggle coregistration
 ) -> Dict:
     """
     Run epoch-based LCMV source estimation using the SUBJECT'S NATIVE T1.
@@ -56,6 +57,13 @@ def lcmv_beamformer_epochs_native(
     Computes the forward model and beamformer filters in native space for 
     biophysical accuracy, then morphs the resulting STCs to fsaverage space 
     to maintain compatibility with lcmv_xtra's atlas extraction functions.
+    
+    Parameters
+    ----------
+    coregister : bool
+        If True (default), runs ICP coregistration to align sensors to the native MRI.
+        If False, assumes sensors in the .fif file are already in the native MRI 
+        coordinate space and uses an identity transform (skips ICP and threshold checks).
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -75,9 +83,19 @@ def lcmv_beamformer_epochs_native(
 
     # 2. Coregistration to NATIVE MRI
     trans_file = output_dir / f'{subject_id}-trans.fif'
-    trans, coreg_errors = _run_coregistration(
-        epochs.info, ch_pos, subject_id, subjects_dir, trans_file, log
-    )
+    
+    if coregister:
+        log.info("Running ICP coregistration to native MRI...")
+        trans, coreg_errors = _run_coregistration(
+            epochs.info, ch_pos, subject_id, subjects_dir, trans_file, log
+        )
+    else:
+        log.info("Skipping coregistration (coregister=False).")
+        log.info("Assuming sensor positions in .fif are already aligned to the native MRI space.")
+        # Create an identity transform from 'head' (sensor) to 'mri' (native anatomy)
+        trans = mne.transforms.Transform('head', 'mri')
+        mne.write_trans(trans_file, trans, overwrite=True)
+        coreg_errors = {'mean': 0.0, 'median': 0.0, 'max': 0.0}
 
     # 3. Native Forward Model
     log.info("Computing native forward solution...")
@@ -119,7 +137,6 @@ def lcmv_beamformer_epochs_native(
     )
 
     # 7. Morph to fsaverage (CRITICAL FOR LCMV_XTRA COMPATIBILITY)
-    # We compute the morph object ONCE using the native source space for efficiency
     log.info("Preparing morph from native space to fsaverage...")
     morph = mne.compute_source_morph(
         src=src_native,
@@ -141,7 +158,8 @@ def lcmv_beamformer_epochs_native(
     metadata = {
         'subject_id': subject_id,
         'task': task,
-        'space': 'native_forward_morphed_to_fsaverage', # Key distinction
+        'space': 'native_forward_morphed_to_fsaverage',
+        'coregistration_applied': coregister,  # Track what was done
         'sfreq_hz': float(epochs.info['sfreq']),
         'epoch_tmin': float(epochs.tmin),
         'epoch_tmax': float(epochs.tmax),
@@ -181,6 +199,7 @@ def execute_source_estimation_epochs_native(
     data_cov_tmin: Optional[float] = None,
     data_cov_tmax: Optional[float] = None,
     compute_noise_cov: bool = True,
+    coregister: bool = True,  # <-- NEW: Toggle coregistration
 ) -> Dict:
     """High-level orchestrator for native epoch-based LCMV source estimation."""
     import lcmv_xtra
@@ -190,7 +209,6 @@ def execute_source_estimation_epochs_native(
     gpsc_full_path = package_dir / 'data' / 'bel_280' / 'ghw280_from_egig.gpsc'
 
     epochs_full_path = project_base / epochs_file_path
-    # Note the _native suffix in the output directory
     output_dir = project_base / 'derivatives' / 'lcmv' / f'{subject_id}_{task}_epochs_native'
 
     epochs, ch_pos = load_epochs(
@@ -207,4 +225,5 @@ def execute_source_estimation_epochs_native(
         baseline_tmin=baseline_tmin, baseline_tmax=baseline_tmax,
         data_cov_tmin=data_cov_tmin, data_cov_tmax=data_cov_tmax,
         compute_noise_cov=compute_noise_cov,
+        coregister=coregister,  # <-- Pass it down
     )
