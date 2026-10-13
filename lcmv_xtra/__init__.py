@@ -30,6 +30,10 @@ from .custom_tensor import (
 )
 from .custom_tensor_epochs import assemble_custom_tensor_epochs
 
+# Native-Space Source Estimation & Tensor Assembly (Subject T1 Forward Model)
+from .source_estimation_epochs_native import execute_source_estimation_epochs_native
+from .custom_tensor_epochs_native import assemble_custom_tensor_epochs_native
+
 # Atlas-Constrained Tensor Assembly (CIMT Before Inverse)
 from .atlas_tensor import assemble_atlas_tensor
 
@@ -100,6 +104,10 @@ __all__ = [
     "assemble_custom_tensor",
     "extract_custom_roi_time_courses",
     "assemble_custom_tensor_epochs",
+
+    # Native-Space Source Estimation & Tensor Assembly (Subject T1 Forward Model)
+    "execute_source_estimation_epochs_native",
+    "assemble_custom_tensor_epochs_native",
 
     # Trial Source Estimation
     "execute_variable_tensor",
