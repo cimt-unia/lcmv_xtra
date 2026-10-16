@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 METERS_TO_MILLIMETERS: float = 1000.0
 DEFAULT_RADIUS_MM: float = 5.0
 DEFAULT_TARGET_SFREQ: float = 250.0
+DEFAULT_MINDIST_MM: float = 2.0  # <--- ADDED: Matches Phase 2 anatomy script
 
 # =============================================================================
 # COORDINATE TRANSFORMATION UTILITIES
@@ -41,23 +42,11 @@ def transform_mni_to_native_space(
     """
     Transforms MNI coordinates into the subject's Native Surface RAS space (mm)
     by inverting FreeSurfer's Talairach affine transform (talairach.xfm).
-    
-    This allows extraction directly from un-morphed native STCs without 
-    volumetric blurring.
     """
-    # 1. Read the Native -> Talairach/MNI transform computed by FreeSurfer
     tal_xfm = mne.read_talxfm(subject, subjects_dir=str(subjects_dir))
-    
-    # 2. Invert it: Talairach/MNI -> Native MRI
     inv_tal = mne.transforms.invert_transform(tal_xfm)
-    
-    # 3. Convert mm to meters (MNE standard)
     coords_m = np.atleast_2d(mni_coords_mm) / 1000.0
-    
-    # 4. Apply inverse transform
     native_coords_m = mne.transforms.apply_trans(inv_tal, coords_m)
-    
-    # 5. Return in mm
     return native_coords_m * 1000.0
 
 # =============================================================================
@@ -108,7 +97,7 @@ def _process_single_subject_custom_epochs_native(args: Tuple) -> Dict:
     """Process one subject: native epoch source estimation + per-epoch ROI extraction."""
     (
         sid, epochs_path, task_name, project_base, subjects_dir,
-        verbose, reg,
+        verbose, reg, mindist,  # <--- ADDED mindist to unpacking
         noise_cov_method, baseline_tmin, baseline_tmax,
         data_cov_tmin, data_cov_tmax, compute_noise_cov,
         mni_roi_coordinates, radius_mm, mode, coregister
@@ -138,6 +127,7 @@ def _process_single_subject_custom_epochs_native(args: Tuple) -> Dict:
             epochs_file_path=epochs_path,
             subjects_dir=subjects_dir,
             reg=reg,
+            mindist=mindist,  # <--- ADDED mindist to function call
             verbose=verbose,
             noise_cov_method=noise_cov_method,
             baseline_tmin=baseline_tmin,
@@ -265,6 +255,7 @@ def assemble_custom_tensor_epochs_native(
     verbose: bool = False,
     target_sfreq: float = DEFAULT_TARGET_SFREQ,
     reg: float = 0.05,
+    mindist: float = DEFAULT_MINDIST_MM,  # <--- ADDED mindist to orchestrator signature
     noise_cov_method: str = 'shrunk',
     baseline_tmin: Optional[float] = None,
     baseline_tmax: Optional[float] = 0.0,
@@ -286,7 +277,7 @@ def assemble_custom_tensor_epochs_native(
     tasks = [
         (
             row['subject_id'], row['epochs_path'], task_name,
-            project_base, subjects_dir, verbose, reg,
+            project_base, subjects_dir, verbose, reg, mindist,  # <--- ADDED mindist to task tuple
             noise_cov_method, baseline_tmin, baseline_tmax,
             data_cov_tmin, data_cov_tmax, compute_noise_cov,
             mni_roi_coordinates, radius_mm, mode, coregister
