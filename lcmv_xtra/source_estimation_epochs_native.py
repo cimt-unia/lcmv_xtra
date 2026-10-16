@@ -1,4 +1,5 @@
 # lcmv_xtra/source_estimation_epochs_native.py
+
 import mne
 import json
 import logging
@@ -38,6 +39,7 @@ def lcmv_beamformer_epochs_native(
     subject_id: str,
     task: str,
     reg: float = 0.05,
+    mindist: float = 2.0, 
     n_jobs: int = 1,
     verbose: bool = False,
     noise_cov_method: str = 'shrunk',
@@ -79,10 +81,10 @@ def lcmv_beamformer_epochs_native(
         mne.write_trans(trans_file, trans, overwrite=True)
         coreg_errors = {'mean': 0.0, 'median': 0.0, 'max': 0.0}
 
-    log.info("Computing native forward solution...")
+    log.info(f"Computing native forward solution (mindist={mindist}mm)...")
     fwd = mne.make_forward_solution(
         epochs.info, trans=trans, src=src_native, bem=bem_native, 
-        eeg=True, mindist=5.0, n_jobs=n_jobs
+        eeg=True, mindist=mindist, n_jobs=n_jobs  # <--- CHANGED: Use parameter instead of hardcoded 5.0/2.0
     )
 
     epochs_eeg = epochs.copy().pick('eeg')
@@ -126,6 +128,7 @@ def lcmv_beamformer_epochs_native(
         'task': task,
         'space': 'pure_native_unmorphed',
         'coregistration_applied': coregister,
+        'forward_mindist_mm': float(mindist),  # <--- ADDED: Track mindist in metadata
         'sfreq_hz': float(epochs.info['sfreq']),
         'epoch_tmin': float(epochs.tmin),
         'epoch_tmax': float(epochs.tmax),
@@ -155,6 +158,7 @@ def execute_source_estimation_epochs_native(
     epochs_file_path: str,
     subjects_dir: Path,
     reg: float = 0.05,
+    mindist: float = 2.0,  # <--- ADDED: Expose mindist in orchestrator
     n_jobs: int = 1,
     verbose: bool = False,
     noise_cov_method: str = 'shrunk',
@@ -184,7 +188,7 @@ def execute_source_estimation_epochs_native(
         epochs=epochs, ch_pos=ch_pos, 
         subjects_dir=subjects_dir, 
         output_dir=output_dir, subject_id=subject_id, task=task,
-        reg=reg, n_jobs=n_jobs, verbose=verbose,
+        reg=reg, mindist=mindist, n_jobs=n_jobs, verbose=verbose, 
         noise_cov_method=noise_cov_method,
         baseline_tmin=baseline_tmin, baseline_tmax=baseline_tmax,
         data_cov_tmin=data_cov_tmin, data_cov_tmax=data_cov_tmax,
