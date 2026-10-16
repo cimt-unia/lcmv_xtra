@@ -9,7 +9,7 @@ from typing import Dict, Tuple, Optional, List
 
 # Import shared utilities from the standard epochs module
 from .source_estimation_epochs import (
-    load_epochs, _setup_logger
+    load_epochs, _setup_logger, _run_coregistration
 )
 
 mne.set_log_level('warning')
@@ -30,53 +30,7 @@ def validate_native_anatomy(subject_id: str, subjects_dir: Path) -> Tuple[Path, 
             "Please run the native anatomy pipeline first."
         )
     return bem_file, src_file
-
-def _run_coregistration(info: mne.Info, ch_pos: Dict, subject: str,
-                        subjects_dir: Path, trans_file: Path,
-                        logger: logging.Logger) -> Tuple[mne.transforms.Transform, Dict]:
-    """Run enhanced coregistration with ICP and outlier removal."""
-    log = logger or logging.getLogger(__name__)
-    
-    # ========================================================================
-    # THE ONLY CHANGE: Explicitly point to the native watershed head surface
-    # ========================================================================
-    native_head_surf = Path(subjects_dir) / subject / "bem" / f"{subject}-head.fif"
-    if not native_head_surf.exists():
-        raise FileNotFoundError(
-            f"Native head surface not found: {native_head_surf}\n"
-            "Ensure 02_generate_bem_and_source_space.py has completed successfully."
-        )
-    # ========================================================================
-
-    coreg = mne.coreg.Coregistration(
-        info, 
-        subject=subject, 
-        subjects_dir=subjects_dir,
-        fiducials={'nasion': ch_pos['FidNz'], 'lpa': ch_pos['FidT9'], 'rpa': ch_pos['FidT10']},
-        head_surface=str(native_head_surf)  # <--- PASS THE NATIVE SURFACE HERE
-    )
-    
-    # Everything below remains EXACTLY the same as your original fsaverage version
-    coreg.fit_fiducials(verbose=False)
-    coreg.fit_icp(n_iterations=6, nasion_weight=2.0, verbose=False)
-
-    dists = coreg.compute_dig_mri_distances()
-    if np.sum(dists > 5.0 / 1000) > 0:
-        coreg.omit_head_shape_points(distance=5.0 / 1000)
-
-    coreg.fit_icp(n_iterations=20, nasion_weight=10.0, verbose=False)
-    trans = coreg.trans
-    mne.write_trans(trans_file, trans, overwrite=True)
-
-    dists = coreg.compute_dig_mri_distances() * 1000
-    mean_err, median_err, max_err = np.mean(dists), np.median(dists), np.max(dists)
-    log.info(f"Coreg error (mm) - Mean: {mean_err:.2f}, Median: {median_err:.2f}, Max: {max_err:.2f}")
-
-    if mean_err > 5.0:
-        raise RuntimeError(f"Mean error {mean_err:.2f}mm exceeds 5mm threshold.")
-
-    return trans, {'mean': mean_err, 'median': median_err, 'max': max_err}
-                            
+         
 def lcmv_beamformer_epochs_native(
     epochs: mne.Epochs,
     ch_pos: Dict,
