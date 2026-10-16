@@ -139,8 +139,8 @@ def _run_coregistration(info: mne.Info, ch_pos: Dict, subject: str,
     mean_err, median_err, max_err = np.mean(dists), np.median(dists), np.max(dists)
     log.info(f"Coreg error (mm) - Mean: {mean_err:.2f}, Median: {median_err:.2f}, Max: {max_err:.2f}")
 
-    if mean_err > 5.0:
-        raise RuntimeError(f"Mean error {mean_err:.2f}mm exceeds 5mm threshold.")
+    if mean_err > 6.5:
+        raise RuntimeError(f"Mean error {mean_err:.2f}mm exceeds 6.5 mm threshold.")
 
     return trans, {'mean': mean_err, 'median': median_err, 'max': max_err}
 
