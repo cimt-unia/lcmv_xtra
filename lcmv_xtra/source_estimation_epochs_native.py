@@ -14,18 +14,6 @@ from .source_estimation_epochs import (
 
 mne.set_log_level('warning')
 
-import logging
-import numpy as np
-import mne
-from pathlib import Path
-from typing import Dict, Tuple
-
-import logging
-import numpy as np
-import mne
-from pathlib import Path
-from typing import Dict, Tuple
-
 def _remove_outliers(coreg: mne.coreg.Coregistration, threshold_mm: float, log: logging.Logger) -> None:
     """Helper to compute distances and omit head shape points beyond a threshold."""
     dists = coreg.compute_dig_mri_distances()
@@ -40,10 +28,13 @@ def _run_coregistration_native(info: mne.Info, ch_pos: Dict, subject: str,
     """Run optimized native-space coregistration with uniform scaling and multi-stage ICP."""
     log = logger or logging.getLogger(__name__)
     
-    # 1. Initialize with uniform scaling (Critical for generic caps on native heads)
+    # 1. Initialize with uniform scaling and ESTIMATED fiducials
     coreg = mne.coreg.Coregistration(
         info, subject=subject, subjects_dir=subjects_dir,
-        fiducials={'nasion': ch_pos['FidNz'], 'lpa': ch_pos['FidT9'], 'rpa': ch_pos['FidT10']}
+        # CRITICAL FIX: Use 'estimated' to get true MRI fiducials from fsaverage.
+        # This prevents the Head-coordinate frame violation that caused the 
+        # "nasion inside skull" bug.
+        fiducials='estimated' 
     )
     coreg.set_scale_mode('uniform')
     
@@ -121,6 +112,7 @@ def lcmv_beamformer_epochs_native(
     data_cov_tmax: Optional[float] = None,
     compute_noise_cov: bool = True,
     coregister: bool = True,
+    trans_file: Optional[Path] = None, # <--- Added to allow bypassing coregistration
 ) -> Dict:
     """
     Run epoch-based LCMV source estimation purely in the SUBJECT'S NATIVE SPACE.
@@ -139,7 +131,8 @@ def lcmv_beamformer_epochs_native(
     src_native = mne.read_source_spaces(native_src_file)
     bem_native = mne.read_bem_solution(native_bem_file)
 
-    trans_file = output_dir / f'{subject_id}-trans.fif'
+    if trans_file is None:
+        trans_file = output_dir / f'{subject_id}-trans.fif'
     
     if coregister:
         log.info("Running ICP coregistration to native MRI...")
@@ -148,15 +141,21 @@ def lcmv_beamformer_epochs_native(
         )
     else:
         log.info("Skipping coregistration (coregister=False).")
-        log.info("Assuming sensor positions in .fif are already aligned to the native MRI space.")
-        trans = mne.transforms.Transform('head', 'mri')
-        mne.write_trans(trans_file, trans, overwrite=True)
-        coreg_errors = {'mean': 0.0, 'median': 0.0, 'max': 0.0}
+        if trans_file.exists():
+            log.info(f"Loading pre-computed transformation from: {trans_file}")
+            trans = mne.read_trans(str(trans_file))
+            # Estimate errors if possible, otherwise zero
+            coreg_errors = {'mean': 0.0, 'median': 0.0, 'max': 0.0}
+        else:
+            log.warning("No trans_file provided and coregister=False. Using identity transform.")
+            trans = mne.transforms.Transform('head', 'mri')
+            mne.write_trans(trans_file, trans, overwrite=True)
+            coreg_errors = {'mean': 0.0, 'median': 0.0, 'max': 0.0}
 
     log.info(f"Computing native forward solution (mindist={mindist}mm)...")
     fwd = mne.make_forward_solution(
         epochs.info, trans=trans, src=src_native, bem=bem_native, 
-        eeg=True, mindist=mindist, n_jobs=n_jobs  # <--- CHANGED: Use parameter instead of hardcoded 5.0/2.0
+        eeg=True, mindist=mindist, n_jobs=n_jobs
     )
 
     epochs_eeg = epochs.copy().pick('eeg')
@@ -200,7 +199,7 @@ def lcmv_beamformer_epochs_native(
         'task': task,
         'space': 'pure_native_unmorphed',
         'coregistration_applied': coregister,
-        'forward_mindist_mm': float(mindist),  # <--- ADDED: Track mindist in metadata
+        'forward_mindist_mm': float(mindist),
         'sfreq_hz': float(epochs.info['sfreq']),
         'epoch_tmin': float(epochs.tmin),
         'epoch_tmax': float(epochs.tmax),
@@ -230,7 +229,7 @@ def execute_source_estimation_epochs_native(
     epochs_file_path: str,
     subjects_dir: Path,
     reg: float = 0.05,
-    mindist: float = 2.0,  # <--- ADDED: Expose mindist in orchestrator
+    mindist: float = 2.0,
     n_jobs: int = 1,
     verbose: bool = False,
     noise_cov_method: str = 'shrunk',
@@ -240,13 +239,16 @@ def execute_source_estimation_epochs_native(
     data_cov_tmax: Optional[float] = None,
     compute_noise_cov: bool = True,
     coregister: bool = True,
+    trans_file: Optional[Path] = None, # <--- Added to allow bypassing coregistration
 ) -> Dict:
     """High-level orchestrator for pure native epoch-based LCMV source estimation."""
     import lcmv_xtra
     
     project_base = Path(project_base)
     package_dir = Path(lcmv_xtra.__file__).parent
-    gpsc_full_path = package_dir / 'data' / 'bel_280' / 'ghw280_from_egig.gpsc'
+    
+    # UPDATED GPSC FILE PATH
+    gpsc_full_path = package_dir / 'data' / 'bel_280' / 'ghw280_from_egig_old.gpsc'
 
     epochs_full_path = project_base / epochs_file_path
     output_dir = project_base / 'derivatives' / 'lcmv' / f'{subject_id}_{task}_epochs_native'
@@ -266,4 +268,5 @@ def execute_source_estimation_epochs_native(
         data_cov_tmin=data_cov_tmin, data_cov_tmax=data_cov_tmax,
         compute_noise_cov=compute_noise_cov,
         coregister=coregister,
+        trans_file=trans_file,
     )
