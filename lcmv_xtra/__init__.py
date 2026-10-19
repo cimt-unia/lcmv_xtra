@@ -34,8 +34,26 @@ from .custom_tensor_epochs import assemble_custom_tensor_epochs
 from .source_estimation_epochs_native import execute_source_estimation_epochs_native
 from .custom_tensor_epochs_native import assemble_custom_tensor_epochs_native
 
-# Atlas-Constrained Tensor Assembly (CIMT Before Inverse)
+# Atlas-Constrained Source Estimation & Tensor Assembly (CIMT Before Inverse)
+from .source_estimation_atlas import (
+    execute_source_estimation_atlas,
+    lcmv_beamformer_cimt,
+    reduce_leadfield_to_cimt,
+    lookup_mni_coordinate,
+    lookup_multiple_coordinates,
+)
 from .atlas_tensor import assemble_atlas_tensor
+
+# Atlas-Constrained Source Estimation & Tensor Assembly (Epochs - Analytical LCMV)
+from .source_estimation_epochs_atlas import (
+    execute_source_estimation_epochs_atlas,
+    lcmv_beamformer_epochs_atlas,
+)
+from .custom_tensor_epochs_atlas import (
+    assemble_custom_atlas_tensor_epochs,
+    map_custom_coords_to_atlas,
+    save_custom_atlas_tensor_epochs,
+)
 
 from .connectivity import (
     compute_gt_motor_connectivity,
@@ -57,14 +75,6 @@ from .coreg import plot_coregistration
 
 from .tensor_variable import execute_variable_tensor
 
-from .source_estimation_atlas import (
-    execute_source_estimation_atlas,
-    lcmv_beamformer_cimt,
-    reduce_leadfield_to_cimt,
-    lookup_mni_coordinate,
-    lookup_multiple_coordinates,
-)
-
 # Deep Learning Neural Beamformer (Optional: requires PyTorch)
 try:
     from .dl_beamformer import (
@@ -72,10 +82,22 @@ try:
         lcmv_beamformer_cimt_pytorch,
     )
     from .dl_tensor_epochs import assemble_dl_tensor_epochs
+    from .source_estimation_epochs_atlas_dl import (
+        execute_source_estimation_epochs_atlas_dl,
+        lcmv_beamformer_epochs_atlas_dl,
+    )
+    from .custom_tensor_epochs_atlas_dl import (
+        assemble_custom_atlas_tensor_epochs_dl,
+        save_custom_atlas_tensor_epochs_dl,
+    )
 except ImportError:
     execute_source_estimation_atlas_pytorch = None
     lcmv_beamformer_cimt_pytorch = None
     assemble_dl_tensor_epochs = None
+    execute_source_estimation_epochs_atlas_dl = None
+    lcmv_beamformer_epochs_atlas_dl = None
+    assemble_custom_atlas_tensor_epochs_dl = None
+    save_custom_atlas_tensor_epochs_dl = None
 
 __version__ = "0.1.0"
 
@@ -137,8 +159,19 @@ __all__ = [
     # Tensor / ML Aggregation (CIMT Atlas-Before-Inverse)
     "assemble_atlas_tensor",
 
+    # Atlas-Constrained Source Estimation (Epochs - Analytical LCMV)
+    "execute_source_estimation_epochs_atlas",
+    "lcmv_beamformer_epochs_atlas",
+    "assemble_custom_atlas_tensor_epochs",
+    "map_custom_coords_to_atlas",
+    "save_custom_atlas_tensor_epochs",
+
     # Deep Learning Neural Beamformer (requires PyTorch)
     "execute_source_estimation_atlas_pytorch",
     "lcmv_beamformer_cimt_pytorch",
     "assemble_dl_tensor_epochs",
+    "execute_source_estimation_epochs_atlas_dl",
+    "lcmv_beamformer_epochs_atlas_dl",
+    "assemble_custom_atlas_tensor_epochs_dl",
+    "save_custom_atlas_tensor_epochs_dl",
 ]
