@@ -49,7 +49,8 @@ from .source_estimation_epochs_atlas import (
     execute_source_estimation_epochs_atlas,
     lcmv_beamformer_epochs_atlas,
 )
-from .custom_tensor_epochs_atlas import (
+# FIX: Changed from .custom_tensor_epochs_atlas to match your actual GitHub filename
+from .custom_tensor_atlas_epochs import (
     assemble_custom_atlas_tensor_epochs,
     map_custom_coords_to_atlas,
     save_custom_atlas_tensor_epochs,
@@ -86,6 +87,7 @@ try:
         execute_source_estimation_epochs_atlas_dl,
         lcmv_beamformer_epochs_atlas_dl,
     )
+    # Matches your GitHub filename exactly
     from .custom_tensor_epochs_atlas_dl import (
         assemble_custom_atlas_tensor_epochs_dl,
         save_custom_atlas_tensor_epochs_dl,
