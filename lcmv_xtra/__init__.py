@@ -30,9 +30,13 @@ from .custom_tensor import (
 )
 from .custom_tensor_epochs import assemble_custom_tensor_epochs
 
-# Native-Space Source Estimation & Tensor Assembly (Subject T1 Forward Model)
+# Native-Space Source Estimation & Tensor Assembly (Subject T1 BEM Forward Model)
 from .source_estimation_epochs_native import execute_source_estimation_epochs_native
 from .custom_tensor_epochs_native import assemble_custom_tensor_epochs_native
+
+# FEM Native-Space Source Estimation & Tensor Assembly (SimNIBS Forward Model)
+from .source_estimation_epochs_native_fem import execute_source_estimation_epochs_native_fem
+from .custom_tensor_epochs_native_fem import assemble_custom_tensor_epochs_native_fem
 
 # Atlas-Constrained Source Estimation & Tensor Assembly (CIMT Before Inverse)
 from .source_estimation_atlas import (
@@ -129,9 +133,13 @@ __all__ = [
     "extract_custom_roi_time_courses",
     "assemble_custom_tensor_epochs",
 
-    # Native-Space Source Estimation & Tensor Assembly (Subject T1 Forward Model)
+    # Native-Space Source Estimation & Tensor Assembly (Subject T1 BEM Forward Model)
     "execute_source_estimation_epochs_native",
     "assemble_custom_tensor_epochs_native",
+
+    # FEM Native-Space Source Estimation & Tensor Assembly (SimNIBS Forward Model)
+    "execute_source_estimation_epochs_native_fem",
+    "assemble_custom_tensor_epochs_native_fem",
 
     # Trial Source Estimation
     "execute_variable_tensor",
