@@ -55,16 +55,19 @@ def _run_coregistration_native(info: mne.Info, ch_pos: Dict, subject: str,
     mne.write_trans(str(trans_file), coreg.trans, overwrite=True)
     return coreg.trans, {'mean': mean_err, 'median': median_err, 'max': max_err}
                                    
+
+
 def validate_fem_anatomy(subject_id: str, simnibs_dir: Path) -> Tuple[Path, Path]:
     """Validate SimNIBS FEM forward solution and source space."""
-    fem_dir = simnibs_dir / f"fem_{subject_id}"
-    fwd_file = fem_dir / f"{subject_id}_leadfield_eeg_montage-fwd.fif"
-    src_file = fem_dir / f"{subject_id}_leadfield_eeg_montage-src.fif"
+    # ⚠️ UPDATED: Point to the new volumetric directory and filenames
+    fem_dir = simnibs_dir / f"fem_vol_{subject_id}"
+    fwd_file = fem_dir / f"{subject_id}_vol_leadfield-fwd.fif"
+    src_file = fem_dir / f"{subject_id}_vol_leadfield-src.fif"
     
     if not (fwd_file.exists() and src_file.exists()):
         raise FileNotFoundError(
-            f"Missing FEM files for {subject_id} in {fem_dir}. "
-            "Please run 02b_simnibs_fem_and_export.py first."
+            f"Missing VOLUMETRIC FEM files for {subject_id} in {fem_dir}. "
+            "Please run 02b_volumetric_fem_and_export.py first."
         )
     return fwd_file, src_file
          
