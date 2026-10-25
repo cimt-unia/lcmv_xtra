@@ -53,25 +53,30 @@ def transform_mni_to_native_space(
 # ROI EXTRACTION (Upgraded for Multi-Patch Surface Source Spaces)
 # =============================================================================
 def extract_custom_roi_time_courses(
-    stc: mne.SourceEstimate,
+    stc,  # Can be mne.SourceEstimate or mne.VolSourceEstimate
     src: mne.SourceSpaces,
     roi_coordinates: Dict[str, List[float]],
     radius_mm: float = DEFAULT_RADIUS_MM,
     mode: Literal["sphere", "single"] = "sphere",
 ) -> Tuple[np.ndarray, List[str]]:
     """
-    Extract time courses from user-defined coordinates (Native Surface RAS).
-    Handles both single-patch (volumetric) and multi-patch (surface L/R) source spaces.
+    Extract time courses from user-defined coordinates.
+    Handles both Volumetric (single patch) and Surface (L/R patches) source spaces.
     """
     stc_data = np.abs(stc.data) if np.iscomplexobj(stc.data) else stc.data
     
-    # Concatenate active coordinates across all source space patches (e.g., L and R hemispheres)
-    all_coords = []
-    for i, s in enumerate(src):
-        active_verts = stc.vertices[i]
-        all_coords.append(s['rr'][active_verts])
-        
-    active_coords_mm = np.vstack(all_coords) * METERS_TO_MILLIMETERS
+    # ⚠️ CRITICAL UPDATE: Handle Volumetric vs Surface Source Estimates
+    if isinstance(stc, mne.VolSourceEstimate):
+        # Volumetric STC: vertices is a single 1D array, src has 1 patch
+        active_verts = stc.vertices
+        active_coords_mm = src[0]['rr'][active_verts] * METERS_TO_MILLIMETERS
+    else:
+        # Surface STC: vertices is a list of arrays (L and R hemispheres)
+        all_coords = []
+        for i, s in enumerate(src):
+            active_verts = stc.vertices[i]
+            all_coords.append(s['rr'][active_verts])
+        active_coords_mm = np.vstack(all_coords) * METERS_TO_MILLIMETERS
 
     time_courses, roi_names = [], []
 
