@@ -121,8 +121,6 @@ def lcmv_beamformer_epochs_native_fem(
                 try:
                     return _orig(tree, fid)
                 except ValueError:
-                    # Instead of returning {} (which destroys channel metadata),
-                    # we load the pristine info from the montage_info.fif saved in Phase 1.
                     info_path = simnibs_dir / "montage_info.fif"
                     info = mne.io.read_info(str(info_path))
                     if 'dev_head_t' not in info or info['dev_head_t'] is None:
@@ -135,10 +133,8 @@ def lcmv_beamformer_epochs_native_fem(
             finally:
                 _fwd_mod._read_forward_meas_info = _orig
             
-            # Inject the transform into the loaded forward object
-            if fwd.get('info') is None:
-                fwd['info'] = {}
-            fwd['info']['mri_head_t'] = mri_head_t
+            # ⚠️ FIX: Inject ONLY at the top level.
+            # MNE's Info object blocks direct assignment to info['mri_head_t'].
             fwd['mri_head_t'] = mri_head_t
             log.info("Successfully injected MRI/head transform via workaround.")
         else:
