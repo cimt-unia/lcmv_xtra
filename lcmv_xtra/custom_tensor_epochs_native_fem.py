@@ -40,14 +40,21 @@ def transform_mni_to_native_space(
     subjects_dir: Path
 ) -> np.ndarray:
     """
-    Transforms MNI coordinates into the subject's Native Surface RAS space (mm)
-    by inverting FreeSurfer's Talairach affine transform (talairach.xfm).
+    Transforms MNI coordinates (mm) into the subject's Native Surface RAS (tkrRAS) space (mm).
+    mne.read_talxfm returns the affine transform from MRI (Surface RAS) to MNI space.
+    Therefore, the inverse maps MNI -> Surface RAS. Both operate natively in millimeters.
     """
+    # 1. Get the Surface RAS -> MNI transform
     tal_xfm = mne.read_talxfm(subject, subjects_dir=str(subjects_dir))
+    
+    # 2. Invert it to get MNI -> Surface RAS
     inv_tal = mne.transforms.invert_transform(tal_xfm)
-    coords_m = np.atleast_2d(mni_coords_mm) / 1000.0
-    native_coords_m = mne.transforms.apply_trans(inv_tal, coords_m)
-    return native_coords_m * 1000.0
+    
+    # 3. Apply directly to the mm coordinates (NO division/multiplication by 1000!)
+    mni_coords_mm = np.atleast_2d(mni_coords_mm)
+    native_coords_mm = mne.transforms.apply_trans(inv_tal, mni_coords_mm)
+    
+    return native_coords_mm
 
 # =============================================================================
 # ROI EXTRACTION (Upgraded for Volumetric Source Spaces)
@@ -65,7 +72,7 @@ def extract_custom_roi_time_courses(
     """
     stc_data = np.abs(stc.data) if np.iscomplexobj(stc.data) else stc.data
     
-    # ⚠️ CRITICAL UPDATE: Handle Volumetric vs Surface Source Estimates
+    # Handle Volumetric vs Surface Source Estimates
     if isinstance(stc, mne.VolSourceEstimate):
         # Volumetric STC: vertices is a single 1D array, src has 1 patch
         active_verts = stc.vertices
@@ -153,8 +160,7 @@ def _process_single_subject_custom_epochs_native_fem(args: Tuple) -> Dict:
         subject_output = Path(metadata['subject_output'])
         n_epochs = metadata['n_epochs']
         
-        # 3. Load native FEM source space 
-        # ⚠️ CRITICAL FIX: Point to the new VOLUMETRIC source space
+        # 3. Load native FEM source space (VOLUMETRIC)
         src_file = simnibs_dir / f"fem_vol_{sid}" / f"{sid}_vol_leadfield-src.fif"
         if not src_file.exists():
             raise FileNotFoundError(f"Missing volumetric source space: {src_file}. Run 02b_volumetric first.")
