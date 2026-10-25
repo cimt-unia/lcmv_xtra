@@ -27,22 +27,17 @@ def _run_coregistration_native(info: mne.Info, ch_pos: Dict, subject: str,
                                logger: logging.Logger) -> Tuple[mne.transforms.Transform, Dict]:
     """Run optimized native-space rigid-body coregistration with multi-stage ICP."""
     log = logger or logging.getLogger(__name__)
-    
     coreg = mne.coreg.Coregistration(
         info, subject=subject, subjects_dir=subjects_dir, fiducials='estimated' 
     )
-    
     log.info("Fitting fiducials...")
     coreg.fit_fiducials(verbose=False)
-    
     log.info("Running Coarse ICP (20 iters, nasion_weight=1.0)...")
     coreg.fit_icp(n_iterations=20, nasion_weight=1.0, verbose=False)
     _remove_outliers(coreg, threshold_mm=8.0, log=log)
-    
     log.info("Running Fine ICP (50 iters, nasion_weight=5.0)...")
     coreg.fit_icp(n_iterations=50, nasion_weight=5.0, verbose=False)
     _remove_outliers(coreg, threshold_mm=10.0, log=log)
-    
     log.info("Running final polish ICP (10 iters)...")
     coreg.fit_icp(n_iterations=10, nasion_weight=5.0, verbose=False)
 
@@ -105,12 +100,49 @@ def lcmv_beamformer_epochs_native_fem(
     log.info(f"FEM-BASED LCMV Epoch Source Estimation: {subject_id} - {task}")
     log.info(f"{'='*60}")
 
-    # 1. Load Precomputed FEM Forward Solution
+    # 1. Load Precomputed FEM Forward Solution (With Cross-Version Workaround)
     fem_fwd_file, _ = validate_fem_anatomy(subject_id, simnibs_dir)
     log.info(f"Loading precomputed FEM forward solution from {fem_fwd_file}...")
-    fwd = mne.read_forward_solution(str(fem_fwd_file))
     
-    # NO SIGN FLIP REQUIRED. SimNIBS handles reciprocity internally.
+    try:
+        fwd = mne.read_forward_solution(str(fem_fwd_file))
+    except ValueError as e:
+        if "MRI/head" in str(e):
+            log.warning("Forward file missing MRI/head transform. Applying robust workaround...")
+            # Load the transform from the saved file
+            trans_path = simnibs_dir / "head_ras-trans.fif"
+            trans = mne.read_trans(str(trans_path))
+            mri_head_t = mne.transforms.invert_transform(trans)
+            
+            # Monkey-patch the reader to bypass the strict check safely
+            import mne.forward.forward as _fwd_mod
+            _orig = _fwd_mod._read_forward_meas_info
+            def _patched(tree, fid):
+                try:
+                    return _orig(tree, fid)
+                except ValueError:
+                    # Instead of returning {} (which destroys channel metadata),
+                    # we load the pristine info from the montage_info.fif saved in Phase 1.
+                    info_path = simnibs_dir / "montage_info.fif"
+                    info = mne.io.read_info(str(info_path))
+                    if 'dev_head_t' not in info or info['dev_head_t'] is None:
+                        info['dev_head_t'] = mne.transforms.Transform('meg', 'head', np.eye(4))
+                    return info
+                    
+            _fwd_mod._read_forward_meas_info = _patched
+            try:
+                fwd = mne.read_forward_solution(str(fem_fwd_file))
+            finally:
+                _fwd_mod._read_forward_meas_info = _orig
+            
+            # Inject the transform into the loaded forward object
+            if fwd.get('info') is None:
+                fwd['info'] = {}
+            fwd['info']['mri_head_t'] = mri_head_t
+            fwd['mri_head_t'] = mri_head_t
+            log.info("Successfully injected MRI/head transform via workaround.")
+        else:
+            raise
     
     # Extract source space directly from the forward object
     src_native = fwd['src'] 
