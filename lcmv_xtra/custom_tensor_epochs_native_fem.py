@@ -4,12 +4,6 @@ Custom Voxel Epoch Tensor Assembly (FEM Native Space).
 =====================================================================
 Extracts time courses from user-defined MNI coordinates per epoch,
 producing a 4D tensor: (Subjects, ROIs, Epochs, Time_per_epoch).
-
-Operates purely in native space using SimNIBS FEM forward models:
-1. Computes LCMV in native space using precomputed volumetric FEM leadfields.
-2. Transforms user-provided MNI coordinates into Native Surface RAS 
-   using the inverse Talairach transform (talairach.xfm).
-3. Extracts directly from un-morphed native STCs (volumetric mesh).
 """
 
 import os
@@ -40,27 +34,23 @@ def transform_mni_to_native_space(
     subjects_dir: Path
 ) -> np.ndarray:
     """
-    Transforms MNI coordinates (mm) into the subject's Native Surface RAS (tkrRAS) space (mm).
-    mne.read_talxfm returns the affine transform from MRI (Surface RAS) to MNI space.
-    Therefore, the inverse maps MNI -> Surface RAS. Both operate natively in millimeters.
+    Transforms MNI coordinates into the subject's Native Surface RAS space (mm).
     """
-    # 1. Get the Surface RAS -> MNI transform
     tal_xfm = mne.read_talxfm(subject, subjects_dir=str(subjects_dir))
-    
-    # 2. Invert it to get MNI -> Surface RAS
     inv_tal = mne.transforms.invert_transform(tal_xfm)
     
-    # 3. Apply directly to the mm coordinates (NO division/multiplication by 1000!)
-    mni_coords_mm = np.atleast_2d(mni_coords_mm)
-    native_coords_mm = mne.transforms.apply_trans(inv_tal, mni_coords_mm)
+    # MNE's apply_trans strictly requires meters
+    coords_m = np.atleast_2d(mni_coords_mm) / 1000.0
+    native_coords_m = mne.transforms.apply_trans(inv_tal, coords_m)
     
-    return native_coords_mm
+    # Convert back to mm
+    return native_coords_m * 1000.0
 
 # =============================================================================
-# ROI EXTRACTION (Upgraded for Volumetric Source Spaces)
+# ROI EXTRACTION (Mirrored exactly from working BEM script)
 # =============================================================================
 def extract_custom_roi_time_courses(
-    stc,  # Can be mne.SourceEstimate or mne.VolSourceEstimate
+    stc,
     src: mne.SourceSpaces,
     roi_coordinates: Dict[str, List[float]],
     radius_mm: float = DEFAULT_RADIUS_MM,
@@ -68,17 +58,16 @@ def extract_custom_roi_time_courses(
 ) -> Tuple[np.ndarray, List[str]]:
     """
     Extract time courses from user-defined coordinates.
-    Handles both Volumetric (single patch) and Surface (L/R patches) source spaces.
     """
     stc_data = np.abs(stc.data) if np.iscomplexobj(stc.data) else stc.data
     
-    # Handle Volumetric vs Surface Source Estimates
+    # ⚠️ CRITICAL FIX: MNE stores VolSourceEstimate vertices as a list containing one array.
+    # We must extract the first element [0] to get the actual 1D array of indices.
     if isinstance(stc, mne.VolSourceEstimate):
-        # Volumetric STC: vertices is a single 1D array, src has 1 patch
-        active_verts = stc.vertices
+        active_verts = stc.vertices[0] if isinstance(stc.vertices, list) else stc.vertices
         active_coords_mm = src[0]['rr'][active_verts] * METERS_TO_MILLIMETERS
     else:
-        # Surface STC: vertices is a list of arrays (L and R hemispheres)
+        # Fallback for Surface STCs
         all_coords = []
         for i, s in enumerate(src):
             active_verts = stc.vertices[i]
@@ -93,7 +82,7 @@ def extract_custom_roi_time_courses(
 
         if mode == "single":
             selected_indices = np.array([np.argmin(distances)])
-        else:  # sphere
+        else:
             selected_indices = np.where(distances <= radius_mm)[0]
             if selected_indices.size == 0:
                 logger.warning(
@@ -122,7 +111,7 @@ def _process_single_subject_custom_epochs_native_fem(args: Tuple) -> Dict:
     ) = args
 
     try:
-        # 1. Transform MNI coordinates to Native Surface RAS for this specific subject
+        # 1. Transform MNI coordinates to Native Surface RAS
         logger.info(f"[{sid}] Transforming MNI coordinates to Native Surface RAS via inverse Talairach...")
         mni_coords_array = np.array(list(mni_roi_coordinates.values()))
         roi_names_list = list(mni_roi_coordinates.keys())
@@ -288,8 +277,6 @@ def assemble_custom_tensor_epochs_native_fem(
 ) -> Optional[Path]:
     """
     Assemble a 4D custom ROI epoch tensor using SimNIBS volumetric FEM forward models.
-    Accepts MNI coordinates, inverse-transforms them to Native Surface RAS 
-    via talairach.xfm, and extracts from un-morphed native STCs.
     """
     if data_index.empty:
         return None
