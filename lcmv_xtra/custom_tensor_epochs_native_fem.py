@@ -6,10 +6,10 @@ Extracts time courses from user-defined MNI coordinates per epoch,
 producing a 4D tensor: (Subjects, ROIs, Epochs, Time_per_epoch).
 
 Operates purely in native space using SimNIBS FEM forward models:
-1. Computes LCMV in native space using precomputed FEM leadfields.
+1. Computes LCMV in native space using precomputed volumetric FEM leadfields.
 2. Transforms user-provided MNI coordinates into Native Surface RAS 
    using the inverse Talairach transform (talairach.xfm).
-3. Extracts directly from un-morphed native STCs (surface mesh).
+3. Extracts directly from un-morphed native STCs (volumetric mesh).
 """
 
 import os
@@ -50,7 +50,7 @@ def transform_mni_to_native_space(
     return native_coords_m * 1000.0
 
 # =============================================================================
-# ROI EXTRACTION (Upgraded for Multi-Patch Surface Source Spaces)
+# ROI EXTRACTION (Upgraded for Volumetric Source Spaces)
 # =============================================================================
 def extract_custom_roi_time_courses(
     stc,  # Can be mne.SourceEstimate or mne.VolSourceEstimate
@@ -153,8 +153,11 @@ def _process_single_subject_custom_epochs_native_fem(args: Tuple) -> Dict:
         subject_output = Path(metadata['subject_output'])
         n_epochs = metadata['n_epochs']
         
-        # 3. Load native FEM source space (Surface mesh from SimNIBS)
-        src_file = simnibs_dir / f"fem_{sid}" / f"{sid}_leadfield_eeg_montage-src.fif"
+        # 3. Load native FEM source space 
+        # ⚠️ CRITICAL FIX: Point to the new VOLUMETRIC source space
+        src_file = simnibs_dir / f"fem_vol_{sid}" / f"{sid}_vol_leadfield-src.fif"
+        if not src_file.exists():
+            raise FileNotFoundError(f"Missing volumetric source space: {src_file}. Run 02b_volumetric first.")
         src = mne.read_source_spaces(str(src_file))
         
         stc_dir = subject_output / "native_stcs"
@@ -244,11 +247,11 @@ def save_custom_tensor_epochs_native_fem(
         sfreq=target_sfreq,
         n_epochs=min_epochs,
         n_rois=stacked.shape[1],
-        forward_model="simnibs_fem_native_mni_inverse_talairach"
+        forward_model="simnibs_fem_volumetric_native_mni_inverse_talairach"
     )
 
     logger.info(
-        f"Saved 4D FEM Native Custom Epoch Tensor {stacked.shape} "
+        f"Saved 4D FEM Volumetric Native Custom Epoch Tensor {stacked.shape} "
         f"(Subjects, ROIs, Epochs, Time) at {target_sfreq} Hz to {output_path}"
     )
     return output_path
@@ -278,7 +281,7 @@ def assemble_custom_tensor_epochs_native_fem(
     coregister: bool = True,
 ) -> Optional[Path]:
     """
-    Assemble a 4D custom ROI epoch tensor using SimNIBS FEM forward models.
+    Assemble a 4D custom ROI epoch tensor using SimNIBS volumetric FEM forward models.
     Accepts MNI coordinates, inverse-transforms them to Native Surface RAS 
     via talairach.xfm, and extracts from un-morphed native STCs.
     """
@@ -303,7 +306,7 @@ def assemble_custom_tensor_epochs_native_fem(
     if n_jobs == -1:
         n_jobs = os.cpu_count()
 
-    logger.info(f"Processing {len(tasks)} subjects with {n_jobs} workers (FEM Native Forward Model)...")
+    logger.info(f"Processing {len(tasks)} subjects with {n_jobs} workers (FEM Volumetric Native Forward Model)...")
     logger.info(f"Input Coordinates: MNI space -> Inverse Talairach -> Native Surface RAS")
 
     with ProcessPoolExecutor(max_workers=n_jobs) as executor:
